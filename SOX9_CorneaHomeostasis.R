@@ -321,19 +321,67 @@ write.csv(avg_exp, file = "c_avg_exp.csv")
 ##########################################################################
 #wilcox
 ######################################################################
-
+#AUC
+######################################################################
+#pct (Percentage of expressing cells in group )
+# The p-value adjusted for multiple testing using the Benjamini-Hochberg (BH) correction to control the false discovery rate (FDR).
+# marker gene for distinguishing between clusters: AUC > 0.7: Acceptable; AUC > 0.8: Strong
+#Statistical power : A measure of the statistical power of the test for each gene. 
+#Receiver Operating Characteristic (ROC) Test (`test.use = “roc”)
+##########################################################################
 Idents(sc_subset_c) <- "seurat_clusters" 
-#run stats with Wilcox instead of ROC
+#run stats with Wilcox and ROC
+
+#################################
+#find the DEG in all clusters
+#################################
 wilcox_stats_c <- FindAllMarkers(sc_subset_c, test.use="wilcox",group.by="seurat_clusters",
                                  only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, )  
 write.csv(wilcox_stats_c, file = "c_wilcox_stats.csv")
 
-# find all markers of cluster 12
+Idents(sc_subset_c) <- "seurat_clusters" 
+roc_c <- FindAllMarkers(sc_subset_c, test.use="roc", group.by="seurat_clusters",
+                        only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, )
+write.csv(roc_c, file = "c_roc.csv")
+#roc_c <- read.csv(file = "roc_c2025.csv")
+# number of genes with AUC>0.7 for each cluster
+roc8_c <- table(roc_c[roc_c$myAUC>0.8,"cluster"])
+write.csv(roc8_c, file = "c_roc8.csv")
+
+#################################
+# find all DEG markers of cluster 12
+#################################
 cluster12_markers_c <- FindMarkers(sc_subset_c, test.use="wilcox", ident.1 = 12, 
                                    only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, )
 write.csv(cluster12_markers_c , file = "c_cluster12_markers.csv")
+# find all markers of cluster 12
+cluster12_roc_c <- FindMarkers(sc_subset_c, test.use="roc", ident.1 = 12, 
+                               only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, )
+write.csv(cluster12_roc_c , file = "c_cluster12_markers_roc.csv")
 
-#LSCs vs TA
+#################################
+# find all DEG markers based on EGFP-bGhpolyA expression
+#################################
+# Set the new cluster identities based on EGFP-bGhpolyA expression
+Idents(sc_subset_c) <- sc_subset_c$EGFP_bGhpolyA_expr
+# Perform DEA between cells expressing "EGFP-bGhpolyA" and those that do not
+deg_results_EGFP_c <- FindMarkers(sc_subset_c, ident.1 = TRUE, ident.2 = FALSE,
+                                  only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, 
+                                  test.use="wilcox")
+# Save DEG results
+write.csv(deg_results_EGFP_c, file = "c_DEG_EGFP_bGhpolyA_vs_Other.csv", row.names = TRUE)
+# Set the new cluster identities based on EGFP-bGhpolyA expression
+Idents(sc_subset_c) <- sc_subset_c$EGFP_bGhpolyA_expr
+# Perform DEA between cells expressing "EGFP-bGhpolyA" and those that do not
+deg_roc_EGFP_c <- FindMarkers(sc_subset_c, ident.1 = TRUE, ident.2 = FALSE,
+                              only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, 
+                              test.use="roc")
+# Save DEG results
+write.csv(deg_roc_EGFP_c, file = "c_DEG_EGFP_vs_Other_roc.csv", row.names = TRUE)
+
+#################################
+# find the DEG markers of LSCs-EGFP vs TA
+#################################
 stem_cluster <- "12"  # replace with the actual stem cell cluster ID
 TA_cluster <-  c(5,7) # replace with TA cluster IDs
 Idents(sc_subset_c) <- "seurat_clusters" 
@@ -358,62 +406,14 @@ head(c_12vsTA_list)
 write.table(c_12vsTA_list, file = "c_12vsTA_list_capital.txt", row.names = FALSE, col.names = FALSE, quote = FALSE)
 
 #########################################################################################
-# Set the new cluster identities based on EGFP-bGhpolyA expression
-Idents(sc_subset_c) <- sc_subset_c$EGFP_bGhpolyA_expr
-# Perform DEA between cells expressing "EGFP-bGhpolyA" and those that do not
-deg_results_EGFP_c <- FindMarkers(sc_subset_c, ident.1 = TRUE, ident.2 = FALSE,
-                                  only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, 
-                                  test.use="wilcox")
-# Save DEG results
-write.csv(deg_results_EGFP_c, file = "c_DEG_EGFP_bGhpolyA_vs_Other.csv", row.names = TRUE)
-
-
-##########################################################################
-#AUC
-######################################################################
-#pct (Percentage of expressing cells in group )
-# The p-value adjusted for multiple testing using the Benjamini-Hochberg (BH) correction to control the false discovery rate (FDR).
-#AUC > 0.8: Strong marker gene for distinguishing between clusters.
-#Statistical power : A measure of the statistical power of the test for each gene. 
-
-
-#Receiver Operating Characteristic (ROC) Test (`test.use = “roc”)
-Idents(sc_subset_c) <- "seurat_clusters" 
-roc_c <- FindAllMarkers(sc_subset_c, test.use="roc", group.by="seurat_clusters",
-                        only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, )
-write.csv(roc_c, file = "c_roc.csv")
-#roc_c <- read.csv(file = "roc_c2025.csv")
-# number of genes with AUC>0.7 for each cluster
-roc8_c <- table(roc_c[roc_c$myAUC>0.8,"cluster"])
-write.csv(roc8_c, file = "c_roc8.csv")
-
-# get top 5 genes for cluster 5
+# get top 10 genes for cluster 12
+#################################################################
 cluster12_c = roc_c[roc_c$cluster==12,]
 cluster12_top5_c <- head(cluster12_c[order(cluster12_c[,1],decreasing=T),],5)
 # getting top 10 genes for all clusters
 library(dplyr)
 top10_c <- roc_c %>% group_by(cluster) %>% top_n(n=10, wt=myAUC)
 top10_c
-
-
-# find all markers of cluster 12
-cluster12_roc_c <- FindMarkers(sc_subset_c, test.use="roc", ident.1 = 12, 
-                                   only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, )
-write.csv(cluster12_roc_c , file = "c_cluster12_markers_roc.csv")
-
-#LSCs vs Diff & TA
-c_roc_12vs2345710 <- FindMarkers(sc_subset_c, ident.1 = 12, ident.2 = c(2,3,4,5,7,10) , test.use="roc",
-                                    only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, )
-write.csv(c_roc_12vs2345710, file = "c_cluster12vs2345710_roc.csv")
-
-# Set the new cluster identities based on EGFP-bGhpolyA expression
-Idents(sc_subset_c) <- sc_subset_c$EGFP_bGhpolyA_expr
-# Perform DEA between cells expressing "EGFP-bGhpolyA" and those that do not
-deg_roc_EGFP_c <- FindMarkers(sc_subset_c, ident.1 = TRUE, ident.2 = FALSE,
-                                  only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, 
-                                  test.use="roc")
-# Save DEG results
-write.csv(deg_roc_EGFP_c, file = "c_DEG_EGFP_vs_Other_roc.csv", row.names = TRUE)
 
 ##########################################################################################
 #cell cycle
