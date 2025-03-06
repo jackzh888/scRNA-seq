@@ -5,19 +5,8 @@ library(Matrix)
 library(tibble)
 library(openxlsx)
 setwd("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ")
-    sc_subset_c <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_joinlayer.rds")
-    #Save the R data file so we can use it later
-    saveRDS(seurat_c, file='seurat_c_filter_before.rds')
-    saveRDS(sc_subset_c,file="sc_subset_c_cluster_before.rds")
-    saveRDS(sc_subset_c,file="sc_subset_c_cluster_after.rds")
-    saveRDS(sc_subset_c,file="sc_subset_c_join_before.rds")
-    #load 
-    sc_subset_c <- readRDS("sc_subset_c_cluster_before.rds")
-     #save.image(file="sox9_scRNAseq_QZ.Rdata")
-    # load("sox9_scRNAseq_QZ_3.Rdata")
-    #savehistory(file="SOX9_scRNAseq_QZ_3.Rhistory")
-    #loadhistory(file="SOX9scRNAseq_QZ_3.Rhistory")
-
+sc_subset_c <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_joinlayer.rds")
+    
 # Paths to CellRanger outputs
 path1 <- "/Users/jackzhou/Desktop/Project_Sox9/Row data_CellRanger/Cornea1/filtered_feature_bc_matrix"
 path2 <- "/Users/jackzhou/Desktop/Project_Sox9/Row data_CellRanger/Cornea2/filtered_feature_bc_matrix"
@@ -39,7 +28,28 @@ head(seurat_c$orig.ident)
 table(seurat_c$orig.ident)
 
 ###################################################################################
+# Check the expression information for "EGFP-bGhpolyA" in original data.
+###############################################################################
+# Joining layers if they're not integrated
+seurat_c_EGFP<- JoinLayers(seurat_c, features = rownames(seurat_ccluster), assay = 'RNA') # Or another relevant assay
 
+# Add expression information for "EGFP-bGhpolyA"
+seurat_c_EGFP$EGFP_bGhpolyA_expr <- GetAssayData(object = seurat_c_EGFP, assay = "RNA", slot = "counts")["EGFP-bGhpolyA", ] > 0
+
+# Subset cells from a specific sample group,
+Idents(seurat_c_EGFP) = "orig.ident"
+seurat_c1 <- subset(seurat_c_EGFP, subset = orig.ident == "Sample1")
+seurat_c2 <- subset(seurat_c_EGFP, subset = orig.ident == "Sample2")
+
+counts_c<-GetAssayData(object = seurat_c_EGFP ,  assay = "RNA", slot = "counts")
+counts_c1<-GetAssayData(object = seurat_c1, assay = "RNA", slot = "counts")
+counts_c2<-GetAssayData(object = seurat_c2, assay = "RNA", slot = "counts")
+
+sum(counts_c["EGFP-bGhpolyA",]>0)
+sum(counts_c1["EGFP-bGhpolyA",]>0)
+sum(counts_c2["EGFP-bGhpolyA",]>0)
+
+###################################################################################
 # make a list of the mitochondrial genes
 gene_names_c <- rownames(seurat_c)
 mt_genes_c <- grep("^mt-", gene_names_c, value = TRUE)
@@ -61,25 +71,9 @@ FeatureScatter(seurat_c, feature1="nCount_RNA",feature2="percent.MT")
 # number of genes vs % mitochondrial expression
 FeatureScatter(seurat_c, feature1="nFeature_RNA",feature2="percent.MT")
 
-#save
-saveRDS(seurat_c, file = 'c_seurat.rds')
-seurat_c <- readRDS('c_seurat.rds')
 ####################################################################################
 # Filter cells for downstream analysis
-#For today, our passing cells must have:
-# ??? Number of genes (nFeature) per cell greater than 2000 and less than 5000
-#??? UMI counts (nCount) per cell greater than 2000
-#??? Less than 10% mitochondrial content
-#seurat <- subset(seurat, subset = nFeature_RNA > 2000 & nFeature_RNA < 5000 & nCount_RNA>2000)
-
-#works with 50% EGFP
 sc_subset_c  <- subset(seurat_c, subset = nFeature_RNA > 2000 & nFeature_RNA < 8000 & nCount_RNA>2000 & percent.MT < 10)
-
-#filter criteria of CORE
-#sc_subset_c <- subset(seurat_c, subset = nFeature_RNA < 8000  &nFeature_RNA > 200 & percent.MT < 20)
-
-#test
-#sc_subset_c <- subset(seurat_c, subset = nFeature_RNA < 8000  &nFeature_RNA > 200 & percent.MT < 10)
 
 # check what fraction of cells we kept from each sample, using the table function
 orig.counts <- table(seurat_c$orig.ident)
@@ -88,34 +82,14 @@ cell_stats <- cbind(orig.counts, subset.counts, subset.counts/orig.counts)
 colnames(cell_stats) <- c("Starting Cells","Retained Cells","Fraction")
 cell_stats
 
-#save
-saveRDS(sc_subset_c, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_filted.rds")
-#sc_subset_c <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_filted.rds")
-
 ###########################################################################################
-#core criteria: Log normalized; scale.factor = 10000
 # normalization
-sc_subset_c <- NormalizeData(sc_subset_c, normalization.method = "LogNormalize", scale.factor = 10000)#core
-#sc_subset_c <- NormalizeData(sc_subset_c, scale.factor = 10000)
+sc_subset_c <- NormalizeData(sc_subset_c, normalization.method = "LogNormalize", scale.factor = 10000)
 
-#save
-saveRDS(sc_subset_c, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_Normalized.rds")
-#sc_subset_c <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_Normalized.rds")
 ###########################################################################################
-# Find variable genes. In practice, you may want to vary the number of features
-
-#core criteria: FindVariableFeatures: nfeatures = 2000, selection.method = 'mvp'
-
-# you select here based on the plot.
-#core
-#sc_subset_c <- FindVariableFeatures(sc_subset_c,nfeatures=2000, selection.method = 'mvp')
-#50%
-sc_subset_c <- FindVariableFeatures(sc_subset_c,nfeatures=9000, selection.method = 'mvp')#the top 9,000 variable genes 
+# Find variable genes. choose the top 9,000 variable genes (or 2000)
+sc_subset_c <- FindVariableFeatures(sc_subset_c,nfeatures=9000, selection.method = 'mvp') 
 VariableFeaturePlot(sc_subset_c)
-
-#save
-saveRDS(sc_subset_c, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_selected.rds")
-#sc_subset_c <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_selected.rds")
 
 ###########################################################################################
 # z-score
@@ -130,43 +104,93 @@ sc_subset_c <- RunPCA(sc_subset_c,features=VariableFeatures(object=sc_subset_c),
 ElbowPlot(sc_subset_c,ndims=24)
 DimHeatmap(sc_subset_c,dims=1:24,cells=300,balanced=T)
 ###########################################################################################
-
-#save
-saveRDS(sc_subset_c, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_PCA.rds")
-#sc_subset_c <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_PCA.rds")
-
-###########################################################################################
 #Dimensional reduction
-#UMAP method
-
-
 ###########################################################################################
-
 # Clustering
 # Run clustering on the top PCs to filter out noise
-#pca.dims1 = 1:10#core
-#pca.dims1 = 1:16#50%
 pca.dims1 = 1:12#13 cluster
-
 sc_subset_c <- FindNeighbors(sc_subset_c, dims=pca.dims1)
-#save
-saveRDS(sc_subset_c, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_PCA2.rds")
-#sc_subset_c <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_PCA2.rds")
 
 ##########################################################################################
-#To optimize resolution by silhouette
+#To optimize resolution by silhouette and clusteree      
+##########################################################################################
+# Load required libraries
+library(Seurat)
+library(clustree)
+
+#To find the optimal number of clusters using the clustree package (Zappia and Oshlack 2018)
+#Step 1: Perform Clustering at Multiple Resolutions
+resolutions <- seq(0.2, 1.0, by = 0.1) # Define the range of resolutions
+for (res in resolutions) {
+  sc_subset_c <- FindClusters(sc_subset_c, resolution = res)
+}
+clustree(sc_subset_c, prefix = "RNA_snn_res.")
+
+#Step 2: Create a Distance Matrix for Silhouette Analysis
+# Extract PCA coordinates
+pca_coords <- Embeddings(sc_subset_c, reduction = "pca")
+
+# Calculate the distance matrix (e.g., Euclidean distance)
+distance_matrix <- dist(pca_coords)
+
+#Step 3: Calculate Silhouette Widths for Each Resolution
+library(cluster)  # For silhouette function
+
+# Initialize a vector to store average silhouette widths
+asw_values <- c()
+
+# Loop through resolutions and calculate silhouette widths
+resolutions <- seq(0.2, 1.0, by = 0.1)
+for (res in resolutions) {
+  # Get cluster assignments
+  cluster_assignments <- as.numeric(as.character(Idents(sc_subset_c)))
+  
+  # Calculate silhouette widths
+  sil <- silhouette(cluster_assignments, dist = distance_matrix)
+  
+  # Store the average silhouette width for this resolution
+  asw_values <- c(asw_values, mean(sil[, 3]))
+}
+
+# Plot silhouette widths across resolutions
+plot(resolutions, asw_values, type = "b", xlab = "Resolution", ylab = "Average Silhouette Width",
+     main = "Silhouette Width vs. Resolution")
+asw_values
 
 ##########################################################################################
 # run clutering, with resolution 
 sc_subset_c <- FindClusters(sc_subset_c, algorithm=2,  resolution=0.5)
 
-
 ##########################################################################################
-# check the cluster silhouette needed
+##########################################################################################
+#to use Library of factoextra to assess average silhouette width of each cluste
+# Install and load libraries
+#install.packages("factoextra")
+#install.packages("cluster")
+library(factoextra)
+library(cluster)
 
-#save
-saveRDS(sc_subset_c, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_cluster.rds")
-#sc_subset_c <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_cluster.rds")
+# Get cluster assignments as numeric values
+cluster_assignments <- as.numeric(as.character(Idents(sc_subset_c)))
+
+# Compute PCA distance matrix
+pca_coords <- Embeddings(sc_subset_c, reduction = "pca")
+distance_matrix <- dist(pca_coords)
+
+# Perform silhouette analysis
+sil <- silhouette(cluster_assignments, dist = distance_matrix)
+
+# Visualize silhouette plot
+fviz_silhouette(sil)
+
+# Extract average silhouette widths
+silhouette_summary <- summary(sil)
+cluster_avg_widths <- silhouette_summary$clus.avg.widths  # Average silhouette width per cluster
+overall_avg_width <- silhouette_summary$avg.width         # Overall average silhouette width
+
+# Print the results
+print(cluster_avg_widths)  # Average silhouette width for each cluster
+print(overall_avg_width)   # Overall average silhouette width
 
 ##########################################################################################
 # Look at cluster IDs of the first 5 cells
@@ -193,6 +217,7 @@ cluster_abundance_c
 cluster_percent_c <- t(t(cluster_abundance_c)/colSums(cluster_abundance_c))
 cluster_percent_c
 
+#########################################################################################
 # UMAP plot
 sc_subset_c <- RunUMAP(sc_subset_c, dims = pca.dims1)
 
@@ -200,11 +225,6 @@ png(filename="c_umap2025.png")
 DimPlot(sc_subset_c, reduction = "umap", label=TRUE, label.size = 5)
 dev.off()  # Close the device to save the file
 ######################################################################################################################################################################################
-  #save
-#saveRDS(sc_subset_c, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_UMAP.rds")
-sc_subset_c <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_UMAP.rds")
-######################################################################################################################################################################################
-
 
 ##################################################################################################################
 ###########Differential expression analysis(DEG) on EGFP-bGhpoly expressed cells############
@@ -215,11 +235,8 @@ sc_subset_c<- JoinLayers(sc_subset_c, features = rownames(sc_subset_ccluster), a
 sc_subset_c <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_joinlayer.rds")
 ##################################################################################################################
 
-
 # Add expression information for "EGFP-bGhpolyA"
 sc_subset_c$EGFP_bGhpolyA_expr <- GetAssayData(object = sc_subset_c, assay = "RNA", slot = "counts")["EGFP-bGhpolyA", ] > 0
-#sc_subset_c_join$EGFP_bGhpolyA_expr <- GetAssayData(object = sc_subset_c_join, assay = "RNA", slot = "counts")["EGFP-bGhpolyA", ] > 0
-sc_subset_c$EGFP_bGhpolyA_expr <- GetAssayData(object = sc_subset_c, assay = "RNA", layer = "counts")["EGFP-bGhpolyA", ] > 0
 
 ###########################################################################################
 # check cells expressed with "EGFP-bGhpolyA"
@@ -283,14 +300,7 @@ barplot(cluster_counts_c_EGFP2$total_count )
 
 write.xlsx(cluster_counts_c_EGFP2,  "c_cluster_counts_EGFP2.xlsx")
 
-
-
 ###########################################################################################
-
-#Differential expression with respect to clusters
-# Joining layers if they're not integrated
-sc_subset_c<- JoinLayers(sc_subset_c, features = rownames(sc_subset_ccluster), assay = 'RNA') # Or another relevant assay
-
 #Differential expression with respect to clusters
 markers_c <- FindAllMarkers(sc_subset_c, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
 write.csv(markers_c, file = "markers_c2025.csv")
@@ -298,17 +308,12 @@ write.csv(markers_c, file = "markers_c2025.csv")
 ##########################################################################################
 #the average gene expression in each clusters
 ##########################################################################################
-
 avg_exp <- AverageExpression(sc_subset_c) #AggregateExpression
 head(avg_exp$RNA)  # Check the first few rows of the average expression matrix for RNA assay
 sc_subset_c <- subset(sc_subset_c, features = rownames(sc_subset_c)[rowSums(GetAssayData(sc_subset_c, slot = "counts")) > 0])
 avg_exp <- AverageExpression(sc_subset_c)
 head(avg_exp$RNA)
 write.csv(avg_exp, file = "c_avg_exp.csv")
-
-
-
-
 
 ################################Manipulate clusters##########################################
 #################Differential expression analysis(DEG) on selected cluster####################
@@ -327,14 +332,6 @@ write.csv(wilcox_stats_c, file = "c_wilcox_stats.csv")
 cluster12_markers_c <- FindMarkers(sc_subset_c, test.use="wilcox", ident.1 = 12, 
                                    only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, )
 write.csv(cluster12_markers_c , file = "c_cluster12_markers.csv")
-
-#LSCs vs Diff & TA
-stem_cluster <- "12"  # replace with the actual stem cell cluster ID
-diff_cluster <-  c(2,3,4,5,7,10) # replace with differentiated cluster IDs
-Idents(sc_subset_c) <- "seurat_clusters" 
-c_clusterStemVsDif <- FindMarkers(sc_subset_c, ident.1 = stem_cluster , ident.2 = diff_cluster , test.use="wilcox")
-write.csv(c_clusterStemVsDif, file = "c_clusterStemVsDif.csv")
-
 
 #LSCs vs TA
 stem_cluster <- "12"  # replace with the actual stem cell cluster ID
@@ -359,13 +356,6 @@ head(c_12vsTA_list)
 c_12vsTA_list <- toupper(c_12vsTA_list$V1)
 head(c_12vsTA_list)
 write.table(c_12vsTA_list, file = "c_12vsTA_list_capital.txt", row.names = FALSE, col.names = FALSE, quote = FALSE)
-
-
-
-
-
-
-
 
 #########################################################################################
 # Set the new cluster identities based on EGFP-bGhpolyA expression
@@ -424,8 +414,6 @@ deg_roc_EGFP_c <- FindMarkers(sc_subset_c, ident.1 = TRUE, ident.2 = FALSE,
                                   test.use="roc")
 # Save DEG results
 write.csv(deg_roc_EGFP_c, file = "c_DEG_EGFP_vs_Other_roc.csv", row.names = TRUE)
-
-
 
 ##########################################################################################
 #cell cycle
@@ -491,8 +479,6 @@ cycle_percentage_c_heatmap <- pheatmap(
 )
 dev.off()
 
-
-
 ##########################################################################################
 #Pseudotime
 ##########################################################################################
@@ -539,8 +525,6 @@ png(filename="monocle_c12_g1_expression_c.png")
 plot_cell_trajectory(monocle_c, markers = topgene, use_color_gradient=T)
 dev.off
 head(t(monocle_c@reducedDimS))
-
-
 
 ##########################################################################################
 #Harmony Integration #https://satijalab.org/seurat/reference/harmonyintegration
