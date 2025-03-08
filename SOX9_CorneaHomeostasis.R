@@ -592,11 +592,11 @@ GSEA_pathway8 <- read_excel("c_GSEA_results_selected.xlsx", sheet=10, col_names 
 c_cluster12vsTA_wil_roc_Aveexp<- read_excel("c_cluster12vsTA_wil_roc_Aveexp.xlsx", sheet=1, col_names = TRUE)
 
 #read metascape pathway results
-c_12vsTA_list_pw1_epi_updated <- read.table("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/2025_Homeostasis analysis_Result/c_12vsTA_list pw1_epi_updated.txt",sep = "\t", header = TRUE)
-c_12vsTA_list_pw2_homeostasis_updated<- read.table("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/2025_Homeostasis analysis_Result/c_12vsTA_list pw2_homeostasis_updated.txt",sep = "\t", header = TRUE)
+c_12vsTA_list_pw1<- read_excel("Metascape_pw.xlsx", sheet =1, col_names = TRUE)
+c_12vsTA_list_pw2 <- read_excel("Metascape_pw.xlsx", sheet =2, col_names = TRUE)
 
-wh_12vsTA_list_pw1_updated<- read.table("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/2025_Wound healing analysis_Result/wh_12vsTA_list_pw1_updated.txt",sep = "\t", header = TRUE)
-wh_12vsTA_list_pw2_updated <- read.table("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/2025_Wound healing analysis_Result/wh_12vsTA_list_pw2_updated.txt",sep = "\t", header = TRUE)
+wh_12vsTA_list_pw1<- read_excel("Metascape_pw.xlsx", sheet =3, col_names = TRUE)
+wh_12vsTA_list_pw2 <- read_excel("Metascape_pw.xlsx", sheet =4, col_names = TRUE)
 
 #Read NGS data
 NGS <- read_excel("NGS_RNAseq.xlsx", sheet =1, col_names = TRUE)
@@ -608,8 +608,8 @@ GSEA_12vsTA_AveExp_Meta_NGS <- c_cluster12vsTA_wil_roc_Aveexp %>%
   full_join(GSEA_pathway1, by = "Gene")%>% full_join(GSEA_pathway2, by = "Gene")%>% full_join(GSEA_pathway3, by = "Gene")%>% 
   full_join(GSEA_pathway4, by = "Gene")%>% full_join(GSEA_pathway5, by = "Gene")%>% full_join(GSEA_pathway6, by = "Gene")%>% 
   full_join(GSEA_pathway7, by = "Gene")%>% full_join(GSEA_pathway8, by = "Gene")%>% 
-  full_join(c_12vsTA_list_pw1_epi_updated , by = "Gene")%>% full_join(c_12vsTA_list_pw2_homeostasis_updated, by = "Gene")%>% 
-  full_join(wh_12vsTA_list_pw1_updated, by = "Gene")%>% full_join(wh_12vsTA_list_pw2_updated, by = "Gene")%>% 
+  full_join(c_12vsTA_list_pw1 , by = "Gene")%>% full_join(c_12vsTA_list_pw2, by = "Gene")%>% 
+  full_join(wh_12vsTA_list_pw1, by = "Gene")%>% full_join(wh_12vsTA_list_pw2, by = "Gene")%>% 
   full_join(NGS, by = "Gene")
 
 write.xlsx(GSEA_12vsTA_AveExp_Meta_NGS, "GSEA_12vsTA_AveExp_Meta_NGS.xlsx",  sheet =1, rowGenes=F)
