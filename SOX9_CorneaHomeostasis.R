@@ -718,7 +718,7 @@ exprMat_filtered <- as(exprMat_filtered, "CsparseMatrix")  # Convert to sparse m
 class(weightMat)  # Should return "dgCMatrix"
 class(exprMat_filtered)  # Should return "dgCMatrix"
 
-#issue with code
+#issue with codes origin?
 regulons <- SCENIC::runSCENIC_1_coexNetwork2modules(weightMat, exprMat_filtered)
 
 
