@@ -1,21 +1,12 @@
 library(Seurat)
+library(dplyr)
 library(ggplot2)
 library(Matrix)
 library(tibble)
 library(openxlsx)
+library( readxl)
 setwd("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ")
-    sc_subset_c <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_joinlayer.rds")
-    #Save the R data file so we can use it later
-    saveRDS(seurat_c, file='seurat_c_filter_before.rds')
-    saveRDS(sc_subset_c,file="sc_subset_c_cluster_before.rds")
-    saveRDS(sc_subset_c,file="sc_subset_c_cluster_after.rds")
-    saveRDS(sc_subset_c,file="sc_subset_c_join_before.rds")
-    #load 
-    sc_subset_c <- readRDS("sc_subset_c_cluster_before.rds")
-     #save.image(file="sox9_scRNAseq_QZ.Rdata")
-    # load("sox9_scRNAseq_QZ_3.Rdata")
-    #savehistory(file="SOX9_scRNAseq_QZ_3.Rhistory")
-    #loadhistory(file="SOX9scRNAseq_QZ_3.Rhistory")
+sc_subset_c <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_joinlayer.rds")
 
 # Paths to CellRanger outputs
 path1 <- "/Users/jackzhou/Desktop/Project_Sox9/Row data_CellRanger/Cornea1/filtered_feature_bc_matrix"
@@ -38,7 +29,28 @@ head(seurat_c$orig.ident)
 table(seurat_c$orig.ident)
 
 ###################################################################################
+# Check the expression information for "EGFP-bGhpolyA" in original data.
+###############################################################################
+# Joining layers if they're not integrated
+seurat_c_EGFP<- JoinLayers(seurat_c, features = rownames(seurat_ccluster), assay = 'RNA') # Or another relevant assay
 
+# Add expression information for "EGFP-bGhpolyA"
+seurat_c_EGFP$EGFP_bGhpolyA_expr <- GetAssayData(object = seurat_c_EGFP, assay = "RNA", slot = "counts")["EGFP-bGhpolyA", ] > 0
+
+# Subset cells from a specific sample group,
+Idents(seurat_c_EGFP) = "orig.ident"
+seurat_c1 <- subset(seurat_c_EGFP, subset = orig.ident == "Sample1")
+seurat_c2 <- subset(seurat_c_EGFP, subset = orig.ident == "Sample2")
+
+counts_c<-GetAssayData(object = seurat_c_EGFP ,  assay = "RNA", slot = "counts")
+counts_c1<-GetAssayData(object = seurat_c1, assay = "RNA", slot = "counts")
+counts_c2<-GetAssayData(object = seurat_c2, assay = "RNA", slot = "counts")
+
+sum(counts_c["EGFP-bGhpolyA",]>0)
+sum(counts_c1["EGFP-bGhpolyA",]>0)
+sum(counts_c2["EGFP-bGhpolyA",]>0)
+
+###################################################################################
 # make a list of the mitochondrial genes
 gene_names_c <- rownames(seurat_c)
 mt_genes_c <- grep("^mt-", gene_names_c, value = TRUE)
@@ -60,25 +72,9 @@ FeatureScatter(seurat_c, feature1="nCount_RNA",feature2="percent.MT")
 # number of genes vs % mitochondrial expression
 FeatureScatter(seurat_c, feature1="nFeature_RNA",feature2="percent.MT")
 
-#save
-saveRDS(seurat_c, file = 'c_seurat.rds')
-seurat_c <- readRDS('c_seurat.rds')
 ####################################################################################
 # Filter cells for downstream analysis
-#For today, our passing cells must have:
-# ??? Number of genes (nFeature) per cell greater than 2000 and less than 5000
-#??? UMI counts (nCount) per cell greater than 2000
-#??? Less than 10% mitochondrial content
-#seurat <- subset(seurat, subset = nFeature_RNA > 2000 & nFeature_RNA < 5000 & nCount_RNA>2000)
-
-#works with 50% EGFP
 sc_subset_c  <- subset(seurat_c, subset = nFeature_RNA > 2000 & nFeature_RNA < 8000 & nCount_RNA>2000 & percent.MT < 10)
-
-#filter criteria of CORE
-#sc_subset_c <- subset(seurat_c, subset = nFeature_RNA < 8000  &nFeature_RNA > 200 & percent.MT < 20)
-
-#test
-#sc_subset_c <- subset(seurat_c, subset = nFeature_RNA < 8000  &nFeature_RNA > 200 & percent.MT < 10)
 
 # check what fraction of cells we kept from each sample, using the table function
 orig.counts <- table(seurat_c$orig.ident)
@@ -87,34 +83,14 @@ cell_stats <- cbind(orig.counts, subset.counts, subset.counts/orig.counts)
 colnames(cell_stats) <- c("Starting Cells","Retained Cells","Fraction")
 cell_stats
 
-#save
-saveRDS(sc_subset_c, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_filted.rds")
-#sc_subset_c <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_filted.rds")
-
 ###########################################################################################
-#core criteria: Log normalized; scale.factor = 10000
 # normalization
-sc_subset_c <- NormalizeData(sc_subset_c, normalization.method = "LogNormalize", scale.factor = 10000)#core
-#sc_subset_c <- NormalizeData(sc_subset_c, scale.factor = 10000)
+sc_subset_c <- NormalizeData(sc_subset_c, normalization.method = "LogNormalize", scale.factor = 10000)
 
-#save
-saveRDS(sc_subset_c, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_Normalized.rds")
-#sc_subset_c <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_Normalized.rds")
 ###########################################################################################
-# Find variable genes. In practice, you may want to vary the number of features
-
-#core criteria: FindVariableFeatures: nfeatures = 2000, selection.method = 'mvp'
-
-# you select here based on the plot.
-#core
-#sc_subset_c <- FindVariableFeatures(sc_subset_c,nfeatures=2000, selection.method = 'mvp')
-#50%
-sc_subset_c <- FindVariableFeatures(sc_subset_c,nfeatures=9000, selection.method = 'mvp')#the top 9,000 variable genes 
+# Find variable genes. choose the top 9,000 variable genes (or 2000)
+sc_subset_c <- FindVariableFeatures(sc_subset_c,nfeatures=9000, selection.method = 'mvp') 
 VariableFeaturePlot(sc_subset_c)
-
-#save
-saveRDS(sc_subset_c, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_selected.rds")
-#sc_subset_c <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_selected.rds")
 
 ###########################################################################################
 # z-score
@@ -124,52 +100,102 @@ sc_subset_c <- ScaleData(sc_subset_c)
 ###########################################################################################
 #Centering and scaling data matrix;
 sc_subset_c <- RunPCA(sc_subset_c,features=VariableFeatures(object=sc_subset_c),
-                    npcs = 50,verbose=F)
+                      npcs = 50,verbose=F)
 # plots
 ElbowPlot(sc_subset_c,ndims=24)
 DimHeatmap(sc_subset_c,dims=1:24,cells=300,balanced=T)
 ###########################################################################################
-
-#save
-saveRDS(sc_subset_c, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_PCA.rds")
-#sc_subset_c <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_PCA.rds")
-
-###########################################################################################
 #Dimensional reduction
-#UMAP method
-
-
 ###########################################################################################
-
 # Clustering
 # Run clustering on the top PCs to filter out noise
-#pca.dims1 = 1:10#core
-#pca.dims1 = 1:16#50%
 pca.dims1 = 1:12#13 cluster
-
 sc_subset_c <- FindNeighbors(sc_subset_c, dims=pca.dims1)
-#save
-saveRDS(sc_subset_c, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_PCA2.rds")
-#sc_subset_c <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_PCA2.rds")
 
 ##########################################################################################
-#To optimize resolution by silhouette
+#To optimize resolution by silhouette and clusteree      
+##########################################################################################
+# Load required libraries
+library(Seurat)
+library(clustree)
+
+#To find the optimal number of clusters using the clustree package (Zappia and Oshlack 2018)
+#Step 1: Perform Clustering at Multiple Resolutions
+resolutions <- seq(0.2, 1.0, by = 0.1) # Define the range of resolutions
+for (res in resolutions) {
+  sc_subset_c <- FindClusters(sc_subset_c, resolution = res)
+}
+clustree(sc_subset_c, prefix = "RNA_snn_res.")
+
+#Step 2: Create a Distance Matrix for Silhouette Analysis
+# Extract PCA coordinates
+pca_coords <- Embeddings(sc_subset_c, reduction = "pca")
+
+# Calculate the distance matrix (e.g., Euclidean distance)
+distance_matrix <- dist(pca_coords)
+
+#Step 3: Calculate Silhouette Widths for Each Resolution
+library(cluster)  # For silhouette function
+
+# Initialize a vector to store average silhouette widths
+asw_values <- c()
+
+# Loop through resolutions and calculate silhouette widths
+resolutions <- seq(0.2, 1.0, by = 0.1)
+for (res in resolutions) {
+  # Get cluster assignments
+  cluster_assignments <- as.numeric(as.character(Idents(sc_subset_c)))
+  
+  # Calculate silhouette widths
+  sil <- silhouette(cluster_assignments, dist = distance_matrix)
+  
+  # Store the average silhouette width for this resolution
+  asw_values <- c(asw_values, mean(sil[, 3]))
+}
+
+# Plot silhouette widths across resolutions
+plot(resolutions, asw_values, type = "b", xlab = "Resolution", ylab = "Average Silhouette Width",
+     main = "Silhouette Width vs. Resolution")
+asw_values
 
 ##########################################################################################
 # run clutering, with resolution 
 sc_subset_c <- FindClusters(sc_subset_c, algorithm=2,  resolution=0.5)
 
-
 ##########################################################################################
-# check the cluster silhouette needed
+##########################################################################################
+#to use Library of factoextra to assess average silhouette width of each cluste
+# Install and load libraries
+#install.packages("factoextra")
+#install.packages("cluster")
+library(factoextra)
+library(cluster)
 
-#save
-saveRDS(sc_subset_c, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_cluster.rds")
-#sc_subset_c <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_cluster.rds")
+# Get cluster assignments as numeric values
+cluster_assignments <- as.numeric(as.character(Idents(sc_subset_c)))
+
+# Compute PCA distance matrix
+pca_coords <- Embeddings(sc_subset_c, reduction = "pca")
+distance_matrix <- dist(pca_coords)
+
+# Perform silhouette analysis
+sil <- silhouette(cluster_assignments, dist = distance_matrix)
+
+# Visualize silhouette plot
+fviz_silhouette(sil)
+
+# Extract average silhouette widths
+silhouette_summary <- summary(sil)
+cluster_avg_widths <- silhouette_summary$clus.avg.widths  # Average silhouette width per cluster
+overall_avg_width <- silhouette_summary$avg.width         # Overall average silhouette width
+
+# Print the results
+print(cluster_avg_widths)  # Average silhouette width for each cluster
+print(overall_avg_width)   # Overall average silhouette width
 
 ##########################################################################################
 # Look at cluster IDs of the first 5 cells
-head(Idents(sc_subset_c ), 2)
+head(Idents(sc_subset_c ), 5)
 ###########################################################################################
 # tSNE plot
 sc_subset_c <- RunTSNE(sc_subset_c, dims=pca.dims1)
@@ -192,6 +218,7 @@ cluster_abundance_c
 cluster_percent_c <- t(t(cluster_abundance_c)/colSums(cluster_abundance_c))
 cluster_percent_c
 
+#########################################################################################
 # UMAP plot
 sc_subset_c <- RunUMAP(sc_subset_c, dims = pca.dims1)
 
@@ -199,11 +226,6 @@ png(filename="c_umap2025.png")
 DimPlot(sc_subset_c, reduction = "umap", label=TRUE, label.size = 5)
 dev.off()  # Close the device to save the file
 ######################################################################################################################################################################################
-  #save
-#saveRDS(sc_subset_c, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_UMAP.rds")
-sc_subset_c <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_UMAP.rds")
-######################################################################################################################################################################################
-
 
 ##################################################################################################################
 ###########Differential expression analysis(DEG) on EGFP-bGhpoly expressed cells############
@@ -214,11 +236,8 @@ sc_subset_c<- JoinLayers(sc_subset_c, features = rownames(sc_subset_ccluster), a
 sc_subset_c <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_joinlayer.rds")
 ##################################################################################################################
 
-
 # Add expression information for "EGFP-bGhpolyA"
 sc_subset_c$EGFP_bGhpolyA_expr <- GetAssayData(object = sc_subset_c, assay = "RNA", slot = "counts")["EGFP-bGhpolyA", ] > 0
-#sc_subset_c_join$EGFP_bGhpolyA_expr <- GetAssayData(object = sc_subset_c_join, assay = "RNA", slot = "counts")["EGFP-bGhpolyA", ] > 0
-sc_subset_c$EGFP_bGhpolyA_expr <- GetAssayData(object = sc_subset_c, assay = "RNA", layer = "counts")["EGFP-bGhpolyA", ] > 0
 
 ###########################################################################################
 # check cells expressed with "EGFP-bGhpolyA"
@@ -282,14 +301,7 @@ barplot(cluster_counts_c_EGFP2$total_count )
 
 write.xlsx(cluster_counts_c_EGFP2,  "c_cluster_counts_EGFP2.xlsx")
 
-
-
 ###########################################################################################
-
-#Differential expression with respect to clusters
-# Joining layers if they're not integrated
-sc_subset_c<- JoinLayers(sc_subset_c, features = rownames(sc_subset_ccluster), assay = 'RNA') # Or another relevant assay
-
 #Differential expression with respect to clusters
 markers_c <- FindAllMarkers(sc_subset_c, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
 write.csv(markers_c, file = "markers_c2025.csv")
@@ -297,7 +309,6 @@ write.csv(markers_c, file = "markers_c2025.csv")
 ##########################################################################################
 #the average gene expression in each clusters
 ##########################################################################################
-
 avg_exp <- AverageExpression(sc_subset_c) #AggregateExpression
 head(avg_exp$RNA)  # Check the first few rows of the average expression matrix for RNA assay
 sc_subset_c <- subset(sc_subset_c, features = rownames(sc_subset_c)[rowSums(GetAssayData(sc_subset_c, slot = "counts")) > 0])
@@ -305,9 +316,9 @@ avg_exp <- AverageExpression(sc_subset_c)
 head(avg_exp$RNA)
 write.csv(avg_exp, file = "c_avg_exp.csv")
 
-
-
-
+df <- as.data.frame(avg_exp$RNA)
+df$Gene <- rownames(df)  # Add gene names as a column
+write.xlsx(df, file = "c_avg_exp.xlsx", rowNames = TRUE)  
 
 ################################Manipulate clusters##########################################
 #################Differential expression analysis(DEG) on selected cluster####################
@@ -315,116 +326,57 @@ write.csv(avg_exp, file = "c_avg_exp.csv")
 ##########################################################################
 #wilcox
 ######################################################################
-
+#AUC
+######################################################################
+#pct (Percentage of expressing cells in group )
+# The p-value adjusted for multiple testing using the Benjamini-Hochberg (BH) correction to control the false discovery rate (FDR).
+# marker gene for distinguishing between clusters: AUC > 0.7: Acceptable; AUC > 0.8: Strong
+#Statistical power : A measure of the statistical power of the test for each gene. 
+#Receiver Operating Characteristic (ROC) Test (`test.use = “roc”)
+##########################################################################
 Idents(sc_subset_c) <- "seurat_clusters" 
-#run stats with Wilcox instead of ROC
-wilcox_stats_c <- FindAllMarkers(sc_subset_c, test.use="wilcox",group.by="seurat_clusters",
-                                 only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, )  
-write.csv(wilcox_stats_c, file = "c_wilcox_stats.csv")
+#run stats with Wilcox and ROC
 
-# find all markers of cluster 12
-cluster12_markers_c <- FindMarkers(sc_subset_c, test.use="wilcox", ident.1 = 12, 
-                                   only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, )
-write.csv(cluster12_markers_c , file = "c_cluster12_markers.csv")
-
-#LSCs vs Diff & TA
-stem_cluster <- "12"  # replace with the actual stem cell cluster ID
-diff_cluster <-  c(2,3,4,5,7,10) # replace with differentiated cluster IDs
-Idents(sc_subset_c) <- "seurat_clusters" 
-c_clusterStemVsDif <- FindMarkers(sc_subset_c, ident.1 = stem_cluster , ident.2 = diff_cluster , test.use="wilcox")
-write.csv(c_clusterStemVsDif, file = "c_clusterStemVsDif.csv")
-
-
-#LSCs vs TA
+###################################################################################################
+# find the DEG markers of LSCs-EGFP vs TA
+###################################################################################################
 stem_cluster <- "12"  # replace with the actual stem cell cluster ID
 TA_cluster <-  c(5,7) # replace with TA cluster IDs
 Idents(sc_subset_c) <- "seurat_clusters" 
+#Wilcox
 c_clusterStemVsTA_wil<- FindMarkers(sc_subset_c, ident.1 = stem_cluster , ident.2 = TA_cluster , test.use="wilcox",
-                                  only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+                                    min.pct = 0.25, logfc.threshold = 0.25) #only.pos = TRUE 
+head(c_clusterStemVsTA_wil)
 write.xlsx(c_clusterStemVsTA_wil, file = "c_clusterStemVsTA_wil.xlsx", rowNames=T)
-c_clusterStemVsTA_wil <- read_excel("c_clusterStemVsTA_wil.xlsx",  col_names = TRUE)
-
+#Roc
 c_clusterStemVsTA_roc<- FindMarkers(sc_subset_c, ident.1 = stem_cluster , ident.2 = TA_cluster , test.use="roc",
-                                only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+                                    min.pct = 0.25, logfc.threshold = 0.25)
 write.xlsx(c_clusterStemVsTA_roc, file = "c_clusterStemVsTA_roc.xlsx", rowNames=T)
+
+#adding the column name with 'Gene', then read the file 
+c_clusterStemVsTA_wil <- read_excel("c_clusterStemVsTA_wil.xlsx",  col_names = TRUE)
 c_clusterStemVsTA_roc <- read_excel("c_clusterStemVsTA_roc.xlsx",  col_names = TRUE)
+avg_exp <- read_excel("c_avg_exp.xlsx",  col_names = TRUE)
 
-c_cluster12vsTA_wil_roc_join <- inner_join(c_clusterStemVsTA_wil, c_clusterStemVsTA_roc, by="Name")
-write.xlsx(c_cluster12vsTA_wil_roc_join, file = "c_cluster12vsTA_wil_roc_join.xlsx",  rowNames=T)
+#inner_join the two statistics test results from wilcoxin and roc 
+c_cluster12vsTA_wil_roc_join <- inner_join(c_clusterStemVsTA_wil, c_clusterStemVsTA_roc, by="Gene")
 
+#inner_join the two statistics test results with the original average expression data
+c_cluster12vsTA_wil_roc_Aveexp <- avg_exp  %>%
+  inner_join(c_clusterStemVsTA_wil, by = "Gene")%>%
+  inner_join(c_clusterStemVsTA_roc, by = "Gene") 
+write.xlsx(c_cluster12vsTA_wil_roc_Aveexp, "c_cluster12vsTA_wil_roc_Aveexp.xlsx", rowNames=F)
+
+##########################################################
+#pathway analysis: Metascape website
+##########################################################
+#Edit the genes name to capital for Metascape website using
 head()
 c_12vsTA_list <- read.table(file = 'c_12vsTA_list.txt')
 head(c_12vsTA_list)
 c_12vsTA_list <- toupper(c_12vsTA_list$V1)
 head(c_12vsTA_list)
 write.table(c_12vsTA_list, file = "c_12vsTA_list_capital.txt", row.names = FALSE, col.names = FALSE, quote = FALSE)
-
-
-
-
-
-
-
-
-#########################################################################################
-# Set the new cluster identities based on EGFP-bGhpolyA expression
-Idents(sc_subset_c) <- sc_subset_c$EGFP_bGhpolyA_expr
-# Perform DEA between cells expressing "EGFP-bGhpolyA" and those that do not
-deg_results_EGFP_c <- FindMarkers(sc_subset_c, ident.1 = TRUE, ident.2 = FALSE,
-                                  only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, 
-                                  test.use="wilcox")
-# Save DEG results
-write.csv(deg_results_EGFP_c, file = "c_DEG_EGFP_bGhpolyA_vs_Other.csv", row.names = TRUE)
-
-
-##########################################################################
-#AUC
-######################################################################
-#pct (Percentage of expressing cells in group )
-# The p-value adjusted for multiple testing using the Benjamini-Hochberg (BH) correction to control the false discovery rate (FDR).
-#AUC > 0.8: Strong marker gene for distinguishing between clusters.
-#Statistical power : A measure of the statistical power of the test for each gene. 
-
-
-#Receiver Operating Characteristic (ROC) Test (`test.use = “roc”)
-Idents(sc_subset_c) <- "seurat_clusters" 
-roc_c <- FindAllMarkers(sc_subset_c, test.use="roc", group.by="seurat_clusters",
-                        only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, )
-write.csv(roc_c, file = "c_roc.csv")
-#roc_c <- read.csv(file = "roc_c2025.csv")
-# number of genes with AUC>0.7 for each cluster
-roc8_c <- table(roc_c[roc_c$myAUC>0.8,"cluster"])
-write.csv(roc8_c, file = "c_roc8.csv")
-
-# get top 5 genes for cluster 5
-cluster12_c = roc_c[roc_c$cluster==12,]
-cluster12_top5_c <- head(cluster12_c[order(cluster12_c[,1],decreasing=T),],5)
-# getting top 10 genes for all clusters
-library(dplyr)
-top10_c <- roc_c %>% group_by(cluster) %>% top_n(n=10, wt=myAUC)
-top10_c
-
-
-# find all markers of cluster 12
-cluster12_roc_c <- FindMarkers(sc_subset_c, test.use="roc", ident.1 = 12, 
-                                   only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, )
-write.csv(cluster12_roc_c , file = "c_cluster12_markers_roc.csv")
-
-#LSCs vs Diff & TA
-c_roc_12vs2345710 <- FindMarkers(sc_subset_c, ident.1 = 12, ident.2 = c(2,3,4,5,7,10) , test.use="roc",
-                                    only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, )
-write.csv(c_roc_12vs2345710, file = "c_cluster12vs2345710_roc.csv")
-
-# Set the new cluster identities based on EGFP-bGhpolyA expression
-Idents(sc_subset_c) <- sc_subset_c$EGFP_bGhpolyA_expr
-# Perform DEA between cells expressing "EGFP-bGhpolyA" and those that do not
-deg_roc_EGFP_c <- FindMarkers(sc_subset_c, ident.1 = TRUE, ident.2 = FALSE,
-                                  only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, 
-                                  test.use="roc")
-# Save DEG results
-write.csv(deg_roc_EGFP_c, file = "c_DEG_EGFP_vs_Other_roc.csv", row.names = TRUE)
-
-
 
 ##########################################################################################
 #cell cycle
@@ -490,13 +442,9 @@ cycle_percentage_c_heatmap <- pheatmap(
 )
 dev.off()
 
-
-
 ##########################################################################################
-#Pseudotime
+#Pseudotime: #Monocle, Velocyto , CytoTRACE, SlingShot.
 ##########################################################################################
-#Monocle, Velocyto , CytoTRACE, SlingShot.
-
 library(monocle3)
 # source the R script
 source("https://uic-ric.github.io/workshop-data/scrna/importCDS2.R")
@@ -539,13 +487,276 @@ plot_cell_trajectory(monocle_c, markers = topgene, use_color_gradient=T)
 dev.off
 head(t(monocle_c@reducedDimS))
 
-
-
 ##########################################################################################
 #Harmony Integration #https://satijalab.org/seurat/reference/harmonyintegration
 #https://htmlpreview.github.io/?https://github.com/immunogenomics/harmony/blob/master/doc/quickstart.html
 ##########################################################################################
 
+#################################################################################
+#Gene Set Enrichment Analysis (GSEA) on the GSEA-MSigDB website, 
+#################################################################################
+
+#Step 1: Load Your DEG Results and Load necessary libraries
+library(dplyr)
+library(readr)
+# Read the DEG file
+deg_data <- read_excel("c_clusterStemVsTA_wil.xlsx",  col_names = TRUE)
+# View the first few rows
+head(deg_data)
+
+#Step 2: Prepare a Ranked Gene List for GSEA
+
+# Rank genes by log2 fold-change
+ranked_genes <- deg_data %>%
+  arrange(desc(avg_log2FC)) %>% # Sort in descending order
+  dplyr::select(Gene, avg_log2FC) #Force dplyr::select() Explicitly
+
+# Convert to named vector for GSEA
+gene_list <- setNames(ranked_genes$avg_log2FC, ranked_genes$Gene)
+
+# Save ranked gene list to a file for GSEA input
+write.table(ranked_genes, file = "c_ranked_genes.rnk", sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE)
+
+#Step 3: Run GSEA in R (fgsea)
+
+# Install fgsea if not installed
+if (!requireNamespace("fgsea", quietly = TRUE)) {
+  install.packages("BiocManager")
+  BiocManager::install("fgsea")
+}
+
+library(fgsea)
+library(msigdbr)
+
+# Load MSigDB Gene Sets (Hallmark Pathway example)
+#hallmark_gene_sets <- msigdbr(species = "Homo sapiens", category = "H")
+hallmark_gene_sets <- msigdbr(species = "Mus musculus", category = "H")
+# Convert to list format for fgsea
+msigdb_list <- split(hallmark_gene_sets$gene_symbol, hallmark_gene_sets$gs_name)
+
+# Run GSEA
+fgsea_results <- fgsea(pathways = msigdb_list, 
+                       stats = gene_list, 
+                       minSize = 15, 
+                       maxSize = 500, 
+                       nperm = 1000)
+
+# Sort and show top enriched pathways
+fgsea_results <- fgsea_results %>% arrange(padj)
+head(fgsea_results)
+
+# Convert list column to character for saving
+fgsea_results$leadingEdge <- sapply(fgsea_results$leadingEdge, function(x) paste(x, collapse = ";"))
+head(fgsea_results)
+
+# Save results to CSV
+write.csv(fgsea_results, "GSEA_results.csv", row.names = FALSE)
+write.xlsx(fgsea_results, "GSEA_results.xlsx")
+
+#select GSEA
+significant_pathways <- fgsea_results %>%
+  filter(padj < 0.05) %>%
+  arrange(padj)  # Sort by significance
+
+top_upregulated <- significant_pathways %>%
+  filter(NES > 0) %>%
+  arrange(desc(NES))  # Strongest positive enrichment
+
+top_downregulated <- significant_pathways %>%
+  filter(NES < 0) %>%
+  arrange(NES)  # Strongest negative enrichment
+
+moderate_size_pathways <- significant_pathways %>%
+  filter(size > 15, size < 500)
+
+library(ggplot2)
+
+ggplot(significant_pathways, aes(x = reorder(pathway, NES), y = NES, fill = NES > 0)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Top Enriched Pathways (FGSEA)", x = "Pathway", y = "Normalized Enrichment Score") +
+  scale_fill_manual(values = c("red", "blue"), labels = c("Downregulated", "Upregulated"))
+
+#==================================================
+### SCENIC 
+#==================================================
+library(SCENIC)
+library(dplyr)
+library(Matrix)
+library(AUCell)
+library(RcisTarget)
+library(GENIE3)
+library(data.table)
 
 
+head(sc_subset_c@meta.data)
+sc_subset_c <- SetIdent(sc_subset_c, value = "seurat_clusters")
+levels(sc_subset_c)
+table(Idents(sc_subset_c))
+
+# subset of 9 clusters from whole data
+LSC <- subset(sc_subset_c, idents=c(5,7,12))
+LSC@active.assay <-'RNA'
+LSC_norm <- NormalizeData(LSC, normalization.method = "LogNormalize", scale.factor = 10000)
+LSC_norm$cluster <- LSC_norm@active.ident
+
+# Assign cluster names
+cidents <- c("TA_C5","TA_C7",'LSC_C12')
+table(LSC_norm@active.ident)
+new.cluster.ids <- c("TA_C5","TA_C7",'LSC_C12')
+names(new.cluster.ids) <- levels(LSC_norm)
+LSC_norm <- RenameIdents(LSC_norm, new.cluster.ids)
+
+# use for LSC_TA_C5 and C7
+# Generate subset matrix
+for (i in 1:2) {
+  #i=9
+  cid <- cidents[i]
+  LSC_s1 <- subset(LSC_norm, idents = cid)
+  LSC_s1_matrix <- as.matrix(GetAssayData(LSC_s1,slot = "counts"))
+  LSC_s1_matrix <- as.data.frame(LSC_s1_matrix)
+  sets_n = floor(length(colnames(LSC_s1))/20)
+  LSC_s1_matrix<-t(LSC_s1_matrix)
+  LSC_s1_matrix <- as.data.frame(LSC_s1_matrix)
+  V<-rep(1:sets_n, each=20)
+  set.seed(001) # just to make it reproducible
+  V<-sample(V)
+  LSC_s1_matrix_split<-split(LSC_s1_matrix,V)
+  round(0.11,0)
+  List<-list()
+  for (j in 1:sets_n){
+    #      normF<-colMeans(LSC_s1_matrix_split[[j]])
+    normF<-round(colMeans(LSC_s1_matrix_split[[j]]),0)
+    List[[j]] <- normF
+  }
+  
+  LSC_s1_mean <- do.call(rbind, List)
+  LSC_s1_mean <- t(LSC_s1_mean)
+  LSC_s1_mean <- as.data.frame(LSC_s1_mean)
+  colnames(LSC_s1_mean) <- paste0(cid,'_',colnames(LSC_s1_mean))
+  head(colnames(LSC_s1_mean))
+  fout <- paste0("LSC_",cid,".csv")
+  write.csv(LSC_s1_mean, fout)
+  print(dim(LSC_s1_mean))
+  
+  rm(LSC_s1)
+  rm(LSC_s1_mean)
+}
+
+# use for LSC12
+i=3
+cid <- cidents[i]
+LSC_s1 <- subset(LSC_norm, idents = cid)
+#LSC_s1_matrix <- as.matrix(LSC_s1[["RNA"]]@data)
+LSC_s1_matrix <- as.matrix(GetAssayData(LSC_s1,slot = "counts"))
+LSC_s1_matrix <- as.data.frame(LSC_s1_matrix)
+colnames(LSC_s1_matrix) <- paste0(cid,'_',colnames(LSC_s1_matrix))
+head(colnames(LSC_s1_matrix))
+fout <- paste0("LSC_",cid,".csv")
+write.csv(LSC_s1_matrix, fout)
+print(dim(LSC_s1_matrix))
+
+################################################################################
+#To identify the Key Regulators by subset matrix "LSC_LSC_C12.csv".
+################################################################################
+# Load necessary libraries
+library(SCENIC)
+library(AUCell)
+library(RcisTarget)
+library(GENIE3)
+library(data.table)
+library(dplyr)
+library(Matrix)
+
+# Step 1: Load the subset matrix (LSC_LSC_C10.csv)
+exprMat <- fread("LSC_LSC_C12.csv", header = TRUE, data.table = FALSE)  # Read file as a data frame
+# Convert first column (gene names) to row names
+rownames(exprMat) <- exprMat[,1]  # Assign first column as row names
+exprMat <- exprMat[,-1]  # Remove the first column as it's now row names
+
+# Convert to matrix (SCENIC requires a matrix format)
+exprMat <- as.matrix(exprMat)
+
+# Check matrix format
+print(dim(exprMat))
+print(head(exprMat[, 1:5]))  # View first 5 columns
+
+# Step 2: Ensure genes are in rows and cells in columns
+if (ncol(exprMat) > nrow(exprMat)) {
+  exprMat <- t(exprMat)
+}
+
+# Step 3: Gene Filtering (keep only highly expressed genes)
+genesKept <- rownames(exprMat)[rowMeans(exprMat > 0.01) > 0.01]
+exprMat_filtered <- exprMat[genesKept, ]
+
+# Step 4: Gene Regulatory Network (GRN) Inference using GENIE3
+set.seed(123)
+weightMat <- GENIE3(exprMat_filtered)
+
+# Step 5: Identify Regulons using RcisTarget
+
+#the code doesn't works
+list.files("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/SCENIC_databases/")
+load("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/SCENIC_databases/motifAnnotations_mgi.RData")
+#https://github.com/aertslab/RcisTarget/blob/master/data/motifAnnotations_mgi.RData
+#https://resources.aertslab.org/cistarget/databases/old/mus_musculus/mm9/refseq_r45/mc9nr/gene_based/
+motifAnnotations_mgi <- motifAnnotations
+
+data(motifAnnotations_mgi)
+
+scenicOptions <- SCENIC::initializeScenic(org = "mgi", dbDir = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/SCENIC_databases/", nCores = 10)
+library(Matrix)
+# Update SCENIC and dependencies
+install.packages("BiocManager")
+BiocManager::install("SCENIC", force = TRUE)
+BiocManager::install("RcisTarget")
+
+weightMat <- as(weightMat, "CsparseMatrix")  # Convert to sparse matrix
+exprMat_filtered <- as(exprMat_filtered, "CsparseMatrix")  # Convert to sparse matrix
+class(weightMat)  # Should return "dgCMatrix"
+class(exprMat_filtered)  # Should return "dgCMatrix"
+
+#issue with code
+regulons <- SCENIC::runSCENIC_1_coexNetwork2modules(weightMat, exprMat_filtered)
+
+# Run RcisTpath = # Run RcisTarget to Identify Regulons
+regulons <- SCENIC::runSCENIC_2_createRegulons(weightMat, exprMat_filtered, org="mmu")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Step 6: Compute Regulon Activity with AUCell
+aucellRankings <- AUCell_buildRankings(exprMat_filtered, nCores = 1)
+regulonAUC <- AUCell_run(aucellRankings, regulons, nCores = 1)
+
+# Step 7: Identify Key Regulators
+keyRegulators <- AUCell_exploreThresholds(regulonAUC, plotHist = TRUE)
+highConfRegulons <- names(which(sapply(keyRegulators$thresholds, function(x) x$aucThr > 0.5)))
+
+# Step 8: Save Results
+write.csv(regulonAUC@assays$data$AUC, "LSC_C12_RegulonAUC.csv")
+write.csv(highConfRegulons, "LSC_C12_Key_Regulators.csv")
+
+# Step 9: Visualize top key regulators
+library(ggplot2)
+library(ComplexHeatmap)
+topTFs <- names(sort(rowMeans(regulonAUC@assays$data$AUC), decreasing = TRUE)[1:10])
+Heatmap(regulonAUC@assays$data$AUC[topTFs, ], cluster_rows = TRUE, cluster_columns = TRUE)
+
+print("SCENIC analysis completed for LSC_C12. Key Regulators Identified.")
 
