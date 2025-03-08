@@ -272,10 +272,6 @@ cluster_counts_c_EGFP <- sc_subset_c@meta.data %>%
   )
 cluster_counts_c_EGFP 
 
-#save
-saveRDS(sc_subset_c, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_join.rds")
-#sc_subset_c <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_join.rds")
-
 # View the plot
 barplot(cluster_counts_c_EGFP$EGFP_bGhpolyA_percentage )
 barplot(cluster_counts_c_EGFP$EGFP_bGhpolyA_count )
@@ -316,6 +312,7 @@ avg_exp <- AverageExpression(sc_subset_c)
 head(avg_exp$RNA)
 write.csv(avg_exp, file = "c_avg_exp.csv")
 
+#in order to save it to excel with gene name.
 df <- as.data.frame(avg_exp$RNA)
 df$Gene <- rownames(df)  # Add gene names as a column
 write.xlsx(df, file = "c_avg_exp.xlsx", rowNames = TRUE)  
@@ -577,6 +574,27 @@ ggplot(significant_pathways, aes(x = reorder(pathway, NES), y = NES, fill = NES 
   theme_minimal() +
   labs(title = "Top Enriched Pathways (FGSEA)", x = "Pathway", y = "Normalized Enrichment Score") +
   scale_fill_manual(values = c("red", "blue"), labels = c("Downregulated", "Upregulated"))
+
+#===============================================================================
+### the overlap genes between the GSEA and Wilcoxon and Roc test
+#===============================================================================
+#read the pathway gene list
+GSEA_pathway1 <- read_excel("c_GSEA_results_selected.xlsx", sheet=3, col_names = TRUE)
+GSEA_pathway2 <- read_excel("c_GSEA_results_selected.xlsx", sheet=4, col_names = TRUE)
+GSEA_pathway3 <- read_excel("c_GSEA_results_selected.xlsx", sheet=5, col_names = TRUE)
+GSEA_pathway4 <- read_excel("c_GSEA_results_selected.xlsx", sheet=6, col_names = TRUE)
+GSEA_pathway5 <- read_excel("c_GSEA_results_selected.xlsx", sheet=7, col_names = TRUE)
+GSEA_pathway6 <- read_excel("c_GSEA_results_selected.xlsx", sheet=8, col_names = TRUE)
+GSEA_pathway7 <- read_excel("c_GSEA_results_selected.xlsx", sheet=9, col_names = TRUE)
+GSEA_pathway8 <- read_excel("c_GSEA_results_selected.xlsx", sheet=10, col_names = TRUE)
+c_cluster12vsTA_wil_roc_Aveexp<- read_excel("c_cluster12vsTA_wil_roc_Aveexp.xlsx", sheet=1, col_names = TRUE)
+#merge with the LSCS vs TA resultf of Wiloxon and Roc
+
+GSEA_12vsTA_AveExp <- c_cluster12vsTA_wil_roc_Aveexp %>% full_join(GSEA_pathway1, by = "Gene")%>% 
+  full_join(GSEA_pathway2, by = "Gene")%>% full_join(GSEA_pathway3, by = "Gene")%>% full_join(GSEA_pathway4, by = "Gene")%>% 
+  full_join(GSEA_pathway5, by = "Gene")%>% full_join(GSEA_pathway6, by = "Gene")%>% full_join(GSEA_pathway7, by = "Gene")%>% 
+  full_join(GSEA_pathway8, by = "Gene")
+write.xlsx(GSEA_12vsTA_AveExp, "c_GSEA_12vsTA_AveExp.xlsx",  sheet =1, rowNames=F)
 
 #==================================================
 ### SCENIC 
