@@ -195,7 +195,7 @@ print(overall_avg_width)   # Overall average silhouette width
 
 ##########################################################################################
 # Look at cluster IDs of the first 5 cells
-head(Idents(sc_subset_c ), 2)
+head(Idents(sc_subset_c ), 5)
 ###########################################################################################
 # tSNE plot
 sc_subset_c <- RunTSNE(sc_subset_c, dims=pca.dims1)
@@ -508,8 +508,8 @@ head(deg_data)
 
 # Rank genes by log2 fold-change
 ranked_genes <- deg_data %>%
-  arrange(desc(avg_log2FC)) %>%  # Sort in descending order
-  select(Gene, avg_log2FC)
+  arrange(desc(avg_log2FC)) %>% # Sort in descending order
+  dplyr::select(Gene, avg_log2FC) #Force dplyr::select() Explicitly
 
 # Convert to named vector for GSEA
 gene_list <- setNames(ranked_genes$avg_log2FC, ranked_genes$Gene)
@@ -547,8 +547,215 @@ head(fgsea_results)
 
 # Convert list column to character for saving
 fgsea_results$leadingEdge <- sapply(fgsea_results$leadingEdge, function(x) paste(x, collapse = ";"))
+head(fgsea_results)
 
 # Save results to CSV
 write.csv(fgsea_results, "GSEA_results.csv", row.names = FALSE)
+write.xlsx(fgsea_results, "GSEA_results.xlsx")
 
+#select GSEA
+significant_pathways <- fgsea_results %>%
+  filter(padj < 0.05) %>%
+  arrange(padj)  # Sort by significance
+
+top_upregulated <- significant_pathways %>%
+  filter(NES > 0) %>%
+  arrange(desc(NES))  # Strongest positive enrichment
+
+top_downregulated <- significant_pathways %>%
+  filter(NES < 0) %>%
+  arrange(NES)  # Strongest negative enrichment
+
+moderate_size_pathways <- significant_pathways %>%
+  filter(size > 15, size < 500)
+
+library(ggplot2)
+
+ggplot(significant_pathways, aes(x = reorder(pathway, NES), y = NES, fill = NES > 0)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Top Enriched Pathways (FGSEA)", x = "Pathway", y = "Normalized Enrichment Score") +
+  scale_fill_manual(values = c("red", "blue"), labels = c("Downregulated", "Upregulated"))
+
+#==================================================
+### SCENIC 
+#==================================================
+library(SCENIC)
+library(dplyr)
+library(Matrix)
+library(AUCell)
+library(RcisTarget)
+library(GENIE3)
+library(data.table)
+
+
+head(sc_subset_c@meta.data)
+sc_subset_c <- SetIdent(sc_subset_c, value = "seurat_clusters")
+levels(sc_subset_c)
+table(Idents(sc_subset_c))
+
+# subset of 9 clusters from whole data
+LSC <- subset(sc_subset_c, idents=c(5,7,12))
+LSC@active.assay <-'RNA'
+LSC_norm <- NormalizeData(LSC, normalization.method = "LogNormalize", scale.factor = 10000)
+LSC_norm$cluster <- LSC_norm@active.ident
+
+# Assign cluster names
+cidents <- c("TA_C5","TA_C7",'LSC_C12')
+table(LSC_norm@active.ident)
+new.cluster.ids <- c("TA_C5","TA_C7",'LSC_C12')
+names(new.cluster.ids) <- levels(LSC_norm)
+LSC_norm <- RenameIdents(LSC_norm, new.cluster.ids)
+
+# use for LSC_TA_C5 and C7
+# Generate subset matrix
+for (i in 1:2) {
+  #i=9
+  cid <- cidents[i]
+  LSC_s1 <- subset(LSC_norm, idents = cid)
+  LSC_s1_matrix <- as.matrix(GetAssayData(LSC_s1,slot = "counts"))
+  LSC_s1_matrix <- as.data.frame(LSC_s1_matrix)
+  sets_n = floor(length(colnames(LSC_s1))/20)
+  LSC_s1_matrix<-t(LSC_s1_matrix)
+  LSC_s1_matrix <- as.data.frame(LSC_s1_matrix)
+  V<-rep(1:sets_n, each=20)
+  set.seed(001) # just to make it reproducible
+  V<-sample(V)
+  LSC_s1_matrix_split<-split(LSC_s1_matrix,V)
+  round(0.11,0)
+  List<-list()
+  for (j in 1:sets_n){
+    #      normF<-colMeans(LSC_s1_matrix_split[[j]])
+    normF<-round(colMeans(LSC_s1_matrix_split[[j]]),0)
+    List[[j]] <- normF
+  }
+  
+  LSC_s1_mean <- do.call(rbind, List)
+  LSC_s1_mean <- t(LSC_s1_mean)
+  LSC_s1_mean <- as.data.frame(LSC_s1_mean)
+  colnames(LSC_s1_mean) <- paste0(cid,'_',colnames(LSC_s1_mean))
+  head(colnames(LSC_s1_mean))
+  fout <- paste0("LSC_",cid,".csv")
+  write.csv(LSC_s1_mean, fout)
+  print(dim(LSC_s1_mean))
+  
+  rm(LSC_s1)
+  rm(LSC_s1_mean)
+}
+
+# use for LSC12
+i=3
+cid <- cidents[i]
+LSC_s1 <- subset(LSC_norm, idents = cid)
+#LSC_s1_matrix <- as.matrix(LSC_s1[["RNA"]]@data)
+LSC_s1_matrix <- as.matrix(GetAssayData(LSC_s1,slot = "counts"))
+LSC_s1_matrix <- as.data.frame(LSC_s1_matrix)
+colnames(LSC_s1_matrix) <- paste0(cid,'_',colnames(LSC_s1_matrix))
+head(colnames(LSC_s1_matrix))
+fout <- paste0("LSC_",cid,".csv")
+write.csv(LSC_s1_matrix, fout)
+print(dim(LSC_s1_matrix))
+
+################################################################################
+#To identify the Key Regulators by subset matrix "LSC_LSC_C12.csv".
+################################################################################
+# Load necessary libraries
+library(SCENIC)
+library(AUCell)
+library(RcisTarget)
+library(GENIE3)
+library(data.table)
+library(dplyr)
+library(Matrix)
+
+# Step 1: Load the subset matrix (LSC_LSC_C10.csv)
+exprMat <- fread("LSC_LSC_C12.csv", header = TRUE, data.table = FALSE)  # Read file as a data frame
+# Convert first column (gene names) to row names
+rownames(exprMat) <- exprMat[,1]  # Assign first column as row names
+exprMat <- exprMat[,-1]  # Remove the first column as it's now row names
+
+# Convert to matrix (SCENIC requires a matrix format)
+exprMat <- as.matrix(exprMat)
+
+# Check matrix format
+print(dim(exprMat))
+print(head(exprMat[, 1:5]))  # View first 5 columns
+
+# Step 2: Ensure genes are in rows and cells in columns
+if (ncol(exprMat) > nrow(exprMat)) {
+  exprMat <- t(exprMat)
+}
+
+# Step 3: Gene Filtering (keep only highly expressed genes)
+genesKept <- rownames(exprMat)[rowMeans(exprMat > 0.01) > 0.01]
+exprMat_filtered <- exprMat[genesKept, ]
+
+# Step 4: Gene Regulatory Network (GRN) Inference using GENIE3
+set.seed(123)
+weightMat <- GENIE3(exprMat_filtered)
+
+# Step 5: Identify Regulons using RcisTarget
+
+#the code doesn't works
+list.files("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/SCENIC_databases/")
+load("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/SCENIC_databases/motifAnnotations_mgi.RData")
+#https://github.com/aertslab/RcisTarget/blob/master/data/motifAnnotations_mgi.RData
+#https://resources.aertslab.org/cistarget/databases/old/mus_musculus/mm9/refseq_r45/mc9nr/gene_based/
+motifAnnotations_mgi <- motifAnnotations
+
+data(motifAnnotations_mgi)
+
+scenicOptions <- SCENIC::initializeScenic(org = "mgi", dbDir = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/SCENIC_databases/", nCores = 10)
+library(Matrix)
+# Update SCENIC and dependencies
+install.packages("BiocManager")
+BiocManager::install("SCENIC", force = TRUE)
+BiocManager::install("RcisTarget")
+
+weightMat <- as(weightMat, "CsparseMatrix")  # Convert to sparse matrix
+exprMat_filtered <- as(exprMat_filtered, "CsparseMatrix")  # Convert to sparse matrix
+class(weightMat)  # Should return "dgCMatrix"
+class(exprMat_filtered)  # Should return "dgCMatrix"
+
+  regulons <- SCENIC::runSCENIC_1_coexNetwork2modules(weightMat, exprMat_filtered)
+
+# Run RcisTpath = # Run RcisTarget to Identify Regulons
+regulons <- SCENIC::runSCENIC_2_createRegulons(weightMat, exprMat_filtered, org="mmu")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Step 6: Compute Regulon Activity with AUCell
+aucellRankings <- AUCell_buildRankings(exprMat_filtered, nCores = 1)
+regulonAUC <- AUCell_run(aucellRankings, regulons, nCores = 1)
+
+# Step 7: Identify Key Regulators
+keyRegulators <- AUCell_exploreThresholds(regulonAUC, plotHist = TRUE)
+highConfRegulons <- names(which(sapply(keyRegulators$thresholds, function(x) x$aucThr > 0.5)))
+
+# Step 8: Save Results
+write.csv(regulonAUC@assays$data$AUC, "LSC_C12_RegulonAUC.csv")
+write.csv(highConfRegulons, "LSC_C12_Key_Regulators.csv")
+
+# Step 9: Visualize top key regulators
+library(ggplot2)
+library(ComplexHeatmap)
+topTFs <- names(sort(rowMeans(regulonAUC@assays$data$AUC), decreasing = TRUE)[1:10])
+Heatmap(regulonAUC@assays$data$AUC[topTFs, ], cluster_rows = TRUE, cluster_columns = TRUE)
+
+print("SCENIC analysis completed for LSC_C12. Key Regulators Identified.")
 
