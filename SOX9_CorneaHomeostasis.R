@@ -721,6 +721,11 @@ class(exprMat_filtered)  # Should return "dgCMatrix"
 #issue with code
 regulons <- SCENIC::runSCENIC_1_coexNetwork2modules(weightMat, exprMat_filtered)
 
+
+
+
+
+
 # Run RcisTpath = # Run RcisTarget to Identify Regulons
 regulons <- SCENIC::runSCENIC_2_createRegulons(weightMat, exprMat_filtered, org="mmu")
 
