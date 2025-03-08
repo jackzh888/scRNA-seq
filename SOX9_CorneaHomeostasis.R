@@ -587,16 +587,34 @@ GSEA_pathway5 <- read_excel("c_GSEA_results_selected.xlsx", sheet=7, col_names =
 GSEA_pathway6 <- read_excel("c_GSEA_results_selected.xlsx", sheet=8, col_names = TRUE)
 GSEA_pathway7 <- read_excel("c_GSEA_results_selected.xlsx", sheet=9, col_names = TRUE)
 GSEA_pathway8 <- read_excel("c_GSEA_results_selected.xlsx", sheet=10, col_names = TRUE)
+
+#Read the DEG comparation result
 c_cluster12vsTA_wil_roc_Aveexp<- read_excel("c_cluster12vsTA_wil_roc_Aveexp.xlsx", sheet=1, col_names = TRUE)
+
+#read metascape pathway results
+c_12vsTA_list_pw1_epi_updated <- read.table("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/2025_Homeostasis analysis_Result/c_12vsTA_list pw1_epi_updated.txt",sep = "\t", header = TRUE)
+c_12vsTA_list_pw2_homeostasis_updated<- read.table("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/2025_Homeostasis analysis_Result/c_12vsTA_list pw2_homeostasis_updated.txt",sep = "\t", header = TRUE)
+
+wh_12vsTA_list_pw1_updated<- read.table("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/2025_Wound healing analysis_Result/wh_12vsTA_list_pw1_updated.txt",sep = "\t", header = TRUE)
+wh_12vsTA_list_pw2_updated <- read.table("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/2025_Wound healing analysis_Result/wh_12vsTA_list_pw2_updated.txt",sep = "\t", header = TRUE)
+
+#Read NGS data
+NGS <- read_excel("NGS_RNAseq.xlsx", sheet =1, col_names = TRUE)
+
 #merge with the LSCS vs TA resultf of Wiloxon and Roc
+head(wh_12vsTA_list_pw1_updated)
+     
+GSEA_12vsTA_AveExp_Meta_NGS <- c_cluster12vsTA_wil_roc_Aveexp %>% 
+  full_join(GSEA_pathway1, by = "Gene")%>% full_join(GSEA_pathway2, by = "Gene")%>% full_join(GSEA_pathway3, by = "Gene")%>% 
+  full_join(GSEA_pathway4, by = "Gene")%>% full_join(GSEA_pathway5, by = "Gene")%>% full_join(GSEA_pathway6, by = "Gene")%>% 
+  full_join(GSEA_pathway7, by = "Gene")%>% full_join(GSEA_pathway8, by = "Gene")%>% 
+  full_join(c_12vsTA_list_pw1_epi_updated , by = "Gene")%>% full_join(c_12vsTA_list_pw2_homeostasis_updated, by = "Gene")%>% 
+  full_join(wh_12vsTA_list_pw1_updated, by = "Gene")%>% full_join(wh_12vsTA_list_pw2_updated, by = "Gene")%>% 
+  full_join(NGS, by = "Gene")
 
-GSEA_12vsTA_AveExp <- c_cluster12vsTA_wil_roc_Aveexp %>% full_join(GSEA_pathway1, by = "Gene")%>% 
-  full_join(GSEA_pathway2, by = "Gene")%>% full_join(GSEA_pathway3, by = "Gene")%>% full_join(GSEA_pathway4, by = "Gene")%>% 
-  full_join(GSEA_pathway5, by = "Gene")%>% full_join(GSEA_pathway6, by = "Gene")%>% full_join(GSEA_pathway7, by = "Gene")%>% 
-  full_join(GSEA_pathway8, by = "Gene")
-write.xlsx(GSEA_12vsTA_AveExp, "c_GSEA_12vsTA_AveExp.xlsx",  sheet =1, rowNames=F)
+write.xlsx(GSEA_12vsTA_AveExp_Meta_NGS, "GSEA_12vsTA_AveExp_Meta_NGS.xlsx",  sheet =1, rowGenes=F)
 
-#==================================================
+x#==================================================
 ### SCENIC 
 #==================================================
 library(SCENIC)
