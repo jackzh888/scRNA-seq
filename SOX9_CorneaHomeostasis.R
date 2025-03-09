@@ -554,9 +554,10 @@ head(fgsea_results)
 fgsea_results$leadingEdge <- sapply(fgsea_results$leadingEdge, function(x) paste(x, collapse = ";"))
 head(fgsea_results)
 
-# Save results to CSV
-#write.csv(fgsea_results, "c_GSEA_StemCell_results.csv", row.names = FALSE)
+# Save results 
 write.xlsx(fgsea_results, "c_GSEA_StemCell_results.xlsx")
+#write.csv(fgsea_results, "c_GSEA_StemCell_results.csv", row.names = FALSE)
+
 
 #select GSEA
 significant_pathways <- fgsea_results %>%
@@ -582,6 +583,65 @@ ggplot(significant_pathways, aes(x = reorder(pathway, NES), y = NES, fill = NES 
   theme_minimal() +
   labs(title = "Top Enriched Pathways (FGSEA)", x = "Pathway", y = "Normalized Enrichment Score") +
   scale_fill_manual(values = c("red", "blue"), labels = c("Downregulated", "Upregulated"))
+
+
+
+
+############################################
+#Extract Genes from MSigDB for Selected Pathways
+
+
+# Load required libraries
+library(msigdbr)
+library(dplyr)
+library(openxlsx)
+
+# Step 1: Select the species (Mouse) and retrieve MSigDB gene sets
+msigdb_list <- msigdbr(species = "Mus musculus")
+
+# Step 2: Manually define the desired Stem Cell Pathways
+selected_pathways <- c("LIM_MAMMARY_LUMINAL_PROGENITOR_UP",
+                       "WONG_ADULT_TISSUE_STEM_MODULE",
+                       "BHATTACHARYA_EMBRYONIC_STEM_CELL",
+                       "BOQUEST_STEM_CELL_UP",
+                       "IVANOVA_HEMATOPOIESIS_STEM_CELL_LONG_TERM",
+                       "MEBARKI_HCC_PROGENITOR_WNT_UP",
+                       "PECE_MAMMARY_STEM_CELL_UP",
+                       "MEBARKI_HCC_PROGENITOR_WNT_UP_CTNNB1_DEPENDENT_BLOCKED_BY_FZD8CRD",
+                       "IVANOVA_HEMATOPOIESIS_STEM_CELL_AND_PROGENITOR"
+                       )
+
+# Step 3: Filter MSigDB gene sets to only include the selected pathways
+stemcell_genes <- msigdb_list %>%
+  filter(gs_name %in% selected_pathways)
+
+# Step 4: Split genes by pathway
+genes_by_pathway <- split(stemcell_genes$gene_symbol, stemcell_genes$gs_name)
+
+# Step 5: Automatically shorten the sheet names to <=31 characters
+short_sheet_names <- substr(names(genes_by_pathway), 1, 31)
+
+# Step 6: Create a new workbook
+wb <- createWorkbook()
+
+# Step 7: Add each pathway as a separate sheet
+for (i in seq_along(genes_by_pathway)) {
+  sheet_name <- short_sheet_names[i]
+  full_name <- names(genes_by_pathway)[i]
+  
+  # Add a new sheet with a shortened name
+  addWorksheet(wb, sheet_name)
+  
+  # Write the full pathway name in the first row
+  writeData(wb, sheet = sheet_name, x = data.frame(Pathway_Name = full_name), startRow = 1, colNames = FALSE)
+  
+  # Write the gene list starting from row 2
+  writeData(wb, sheet = sheet_name, x = as.data.frame(genes_by_pathway[[i]]), startRow = 2, colNames = FALSE)
+}
+
+# Step 8: Save the workbook
+saveWorkbook(wb, file = "c_StemCell_Pathway_Genes.xlsx", overwrite = TRUE)
+
 
 
 #==================================================
