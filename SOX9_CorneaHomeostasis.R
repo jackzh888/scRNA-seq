@@ -522,21 +522,29 @@ if (!requireNamespace("fgsea", quietly = TRUE)) {
   BiocManager::install("fgsea")
 }
 
-library(fgsea)
+#####~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#####Step 3 pathway selection: Load MSigDB Gene Sets associated with stem cell pathway
+#####~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Load necessary libraries
 library(msigdbr)
+library(fgsea)
+library(ggplot2)
+library(dplyr)
+library(pheatmap)
 
-# Load MSigDB Gene Sets (Hallmark Pathway example)
-#hallmark_gene_sets <- msigdbr(species = "Homo sapiens", category = "H")
-hallmark_gene_sets <- msigdbr(species = "Mus musculus", category = "H")
-# Convert to list format for fgsea
-msigdb_list <- split(hallmark_gene_sets$gene_symbol, hallmark_gene_sets$gs_name)
+# 1: Load MSigDB Gene Sets (Stem Cell Pathways)
+msigdb <- msigdbr(species = "Mus musculus")
+stem_cell_pathways <- msigdb %>%
+  filter(grepl("stem|pluripotent|progenitor|self-renew|embryonic", gs_name, ignore.case = TRUE))
 
-# Run GSEA
-fgsea_results <- fgsea(pathways = msigdb_list, 
-                       stats = gene_list, 
-                       minSize = 15, 
-                       maxSize = 500, 
-                       nperm = 1000)
+# 2: Prepare Gene Sets for GSEA
+gene_sets <- split(stem_cell_pathways$gene_symbol, stem_cell_pathways$gs_name)
+# 3: Run GSEA
+fgsea_results <- fgsea(pathways = gene_sets,
+                       stats = gene_list,
+                       minSize = 10,
+                       maxSize = 500,
+                       nperm = 10000)
 
 # Sort and show top enriched pathways
 fgsea_results <- fgsea_results %>% arrange(padj)
@@ -547,8 +555,8 @@ fgsea_results$leadingEdge <- sapply(fgsea_results$leadingEdge, function(x) paste
 head(fgsea_results)
 
 # Save results to CSV
-write.csv(fgsea_results, "GSEA_results.csv", row.names = FALSE)
-write.xlsx(fgsea_results, "GSEA_results.xlsx")
+#write.csv(fgsea_results, "c_GSEA_StemCell_results.csv", row.names = FALSE)
+write.xlsx(fgsea_results, "c_GSEA_StemCell_results.xlsx")
 
 #select GSEA
 significant_pathways <- fgsea_results %>%
