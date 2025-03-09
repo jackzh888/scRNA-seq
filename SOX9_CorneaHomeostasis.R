@@ -575,46 +575,8 @@ ggplot(significant_pathways, aes(x = reorder(pathway, NES), y = NES, fill = NES 
   labs(title = "Top Enriched Pathways (FGSEA)", x = "Pathway", y = "Normalized Enrichment Score") +
   scale_fill_manual(values = c("red", "blue"), labels = c("Downregulated", "Upregulated"))
 
-#===============================================================================
-### the overlap genes between the GSEA and Wilcoxon and Roc test
-#===============================================================================
-#read the pathway gene list
-GSEA_pathway1 <- read_excel("c_GSEA_results_selected.xlsx", sheet=3, col_names = TRUE)
-GSEA_pathway2 <- read_excel("c_GSEA_results_selected.xlsx", sheet=4, col_names = TRUE)
-GSEA_pathway3 <- read_excel("c_GSEA_results_selected.xlsx", sheet=5, col_names = TRUE)
-GSEA_pathway4 <- read_excel("c_GSEA_results_selected.xlsx", sheet=6, col_names = TRUE)
-GSEA_pathway5 <- read_excel("c_GSEA_results_selected.xlsx", sheet=7, col_names = TRUE)
-GSEA_pathway6 <- read_excel("c_GSEA_results_selected.xlsx", sheet=8, col_names = TRUE)
-GSEA_pathway7 <- read_excel("c_GSEA_results_selected.xlsx", sheet=9, col_names = TRUE)
-GSEA_pathway8 <- read_excel("c_GSEA_results_selected.xlsx", sheet=10, col_names = TRUE)
 
-#Read the DEG comparation result
-c_cluster12vsTA_wil_roc_Aveexp<- read_excel("c_cluster12vsTA_wil_roc_Aveexp.xlsx", sheet=1, col_names = TRUE)
-
-#read metascape pathway results
-c_12vsTA_list_pw1<- read_excel("Metascape_pw.xlsx", sheet =1, col_names = TRUE)
-c_12vsTA_list_pw2 <- read_excel("Metascape_pw.xlsx", sheet =2, col_names = TRUE)
-
-wh_12vsTA_list_pw1<- read_excel("Metascape_pw.xlsx", sheet =3, col_names = TRUE)
-wh_12vsTA_list_pw2 <- read_excel("Metascape_pw.xlsx", sheet =4, col_names = TRUE)
-
-#Read NGS data
-NGS <- read_excel("NGS_RNAseq.xlsx", sheet =1, col_names = TRUE)
-
-#merge with the LSCS vs TA resultf of Wiloxon and Roc
-head(wh_12vsTA_list_pw1_updated)
-     
-GSEA_12vsTA_AveExp_Meta_NGS <- c_cluster12vsTA_wil_roc_Aveexp %>% 
-  full_join(GSEA_pathway1, by = "Gene")%>% full_join(GSEA_pathway2, by = "Gene")%>% full_join(GSEA_pathway3, by = "Gene")%>% 
-  full_join(GSEA_pathway4, by = "Gene")%>% full_join(GSEA_pathway5, by = "Gene")%>% full_join(GSEA_pathway6, by = "Gene")%>% 
-  full_join(GSEA_pathway7, by = "Gene")%>% full_join(GSEA_pathway8, by = "Gene")%>% 
-  full_join(c_12vsTA_list_pw1 , by = "Gene")%>% full_join(c_12vsTA_list_pw2, by = "Gene")%>% 
-  full_join(wh_12vsTA_list_pw1, by = "Gene")%>% full_join(wh_12vsTA_list_pw2, by = "Gene")%>% 
-  full_join(NGS, by = "Gene")
-
-write.xlsx(GSEA_12vsTA_AveExp_Meta_NGS, "GSEA_12vsTA_AveExp_Meta_NGS.xlsx",  sheet =1, rowGenes=F)
-
-x#==================================================
+#==================================================
 ### SCENIC 
 #==================================================
 library(SCENIC)
