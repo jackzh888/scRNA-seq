@@ -889,7 +889,7 @@ write.xlsx(Upregulated_DAVID_pfilted,"/Users/jackzhou/Desktop/Project_Sox9/sox9_
 #162 pathway left
 
 filtered_results <- Upregulated_DAVID_pfilted %>%
-    filter(grepl("stem cell maintenance|differentiation|pluripotency", Term, ignore.case = TRUE))
+    filter(grepl("stem cell maintenance|differentiation|pluripotency|proliferation|stem cell|epithelial cell", Term, ignore.case = TRUE))
 print(filtered_results)
 write.xlsx(filtered_results,"/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/DAVID/C_clusterStemVsTA_wil_Upregulated_DAVID_stem.xlsx", rowNames=F)
 head(filtered_results)
