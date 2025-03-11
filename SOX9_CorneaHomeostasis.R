@@ -888,13 +888,11 @@ head(Upregulated_DAVID_pfilted)
 write.xlsx(Upregulated_DAVID_pfilted,"/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/DAVID/Upregulated_DAVID_pfilted.xlsx", rowNames=F)
 #162 pathway left
 
-filtered_results <- Upregulated_DAVID %>%
+filtered_results <- Upregulated_DAVID_pfilted %>%
     filter(grepl("stem cell maintenance|differentiation|pluripotency", Term, ignore.case = TRUE))
 print(filtered_results)
-write.xlsx(filtered_results,"/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/DAVID/C_clusterStemVsTA_wil_Upregulated_DAVID_filtered.xlsx", rowNames=F)
+write.xlsx(filtered_results,"/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/DAVID/C_clusterStemVsTA_wil_Upregulated_DAVID_stem.xlsx", rowNames=F)
 head(filtered_results)
+#2 pathway left.
 
-Upregulated_DAVID_candidate <- filtered_results  %>%
-  filter(PValue<0.05 &  Bonferroni < 0.05 & Benjamini < 0.05& FDR< 0.05) 
-head(Upregulated_DAVID_candidate)
-write.xlsx(Upregulated_DAVID_candidate,"/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/DAVID/Upregulated_DAVID_candidate.xlsx", rowNames=F)
+
