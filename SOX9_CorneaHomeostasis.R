@@ -364,8 +364,13 @@ c_cluster12vsTA_wil_roc_Aveexp <- avg_exp  %>%
   inner_join(c_clusterStemVsTA_roc, by = "Gene") 
 write.xlsx(c_cluster12vsTA_wil_roc_Aveexp, "c_cluster12vsTA_wil_roc_Aveexp.xlsx", rowNames=F)
 
+
+#==================================================
+### pathway 
+#==================================================
+
 ##########################################################
-#pathway analysis: Metascape website
+#pathway analysis 1: Metascape website
 ##########################################################
 #Edit the genes name to capital for Metascape website using
 head()
@@ -439,8 +444,14 @@ cycle_percentage_c_heatmap <- pheatmap(
 )
 dev.off()
 
+
+#==================================================
+### Pseudotime: 
+##Monocle, Velocyto , CytoTRACE, SlingShot. 
+#==================================================
+
 ##########################################################################################
-#Pseudotime: #Monocle, Velocyto , CytoTRACE, SlingShot.
+##Pseudotime 1:Monocle
 ##########################################################################################
 library(monocle3)
 # source the R script
@@ -489,8 +500,14 @@ head(t(monocle_c@reducedDimS))
 #https://htmlpreview.github.io/?https://github.com/immunogenomics/harmony/blob/master/doc/quickstart.html
 ##########################################################################################
 
+
+
+#==================================================
+### Gene Set Enrichment Analysis (GSEA)
+#==================================================
+
 #################################################################################
-#Gene Set Enrichment Analysis (GSEA) on the GSEA-MSigDB website, 
+#GSEA 1 : on the GSEA-MSigDB website, 
 #################################################################################
 
 #Step 1: Load Your DEG Results and Load necessary libraries
@@ -523,7 +540,25 @@ if (!requireNamespace("fgsea", quietly = TRUE)) {
 }
 
 #####~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#####Step 3 pathway selection: Load MSigDB Gene Sets associated with stem cell pathway
+#####Step 3 pathway selection: Load MSigDB Gene Sets associated with Hallmark pathway
+#####~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+library(fgsea)
+library(msigdbr)
+# Load MSigDB Gene Sets (Hallmark Pathway )
+hallmark_gene_sets <- msigdbr(species = "Mus musculus", category = "H")#Homo sapiens
+# Convert to list format for fgsea
+msigdb_list <- split(hallmark_gene_sets$gene_symbol, hallmark_gene_sets$gs_name)
+
+# Run GSEA
+fgsea_results <- fgsea(pathways = msigdb_list, 
+                       stats = gene_list, 
+                       minSize = 15, 
+                       maxSize = 500, 
+                       nperm = 1000)
+
+
+#####~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#####Step 3 pathway selection 2: Load MSigDB Gene Sets associated with stem cell pathway
 #####~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Load necessary libraries
 library(msigdbr)
@@ -546,6 +581,10 @@ fgsea_results <- fgsea(pathways = gene_sets,
                        maxSize = 500,
                        nperm = 10000)
 
+#####~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#####Step 4
+#####~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 # Sort and show top enriched pathways
 fgsea_results <- fgsea_results %>% arrange(padj)
 head(fgsea_results)
@@ -555,6 +594,7 @@ fgsea_results$leadingEdge <- sapply(fgsea_results$leadingEdge, function(x) paste
 head(fgsea_results)
 
 # Save results 
+write.xlsx(fgsea_results, "c_GSEA_Hallmark_results.xlsx")
 write.xlsx(fgsea_results, "c_GSEA_StemCell_results.xlsx")
 #write.csv(fgsea_results, "c_GSEA_StemCell_results.csv", row.names = FALSE)
 
@@ -664,7 +704,7 @@ write.csv(LSC_s1_matrix, fout)
 print(dim(LSC_s1_matrix))
 
 ################################################################################
-#To identify the Key Regulators by subset matrix "LSC_LSC_C12.csv".
+#SCENIC continue: To identify the Key Regulators by subset matrix "LSC_LSC_C12.csv".
 ################################################################################
 # Load necessary libraries
 library(SCENIC)
@@ -675,7 +715,7 @@ library(data.table)
 library(dplyr)
 library(Matrix)
 
-# Step 1: Load the subset matrix (LSC_LSC_C10.csv)
+# Step 1: Load the subset matrix (LSC_LSC_C12.csv)
 exprMat <- fread("LSC_LSC_C12.csv", header = TRUE, data.table = FALSE)  # Read file as a data frame
 # Convert first column (gene names) to row names
 rownames(exprMat) <- exprMat[,1]  # Assign first column as row names
@@ -771,3 +811,90 @@ Heatmap(regulonAUC@assays$data$AUC[topTFs, ], cluster_rows = TRUE, cluster_colum
 
 print("SCENIC analysis completed for LSC_C12. Key Regulators Identified.")
 
+#=================================================================================
+### Gene Ontology (GO) Enrichment analysis and generate a network file for Cytoscape 
+# to generate a regulatory network and visualize it in Cytoscape  
+#=================================================================================
+if(!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+BiocManager::install("clusterProfiler")
+BiocManager::install("org.Mm.eg.db")  # For mouse dataset
+BiocManager::install("enrichplot")
+install.packages("readr")
+install.packages("writexl")
+
+library(clusterProfiler)
+library(org.Mm.eg.db)
+library(enrichplot)
+library(readr)
+library(writexl)
+library(tidyr)
+library(dplyr)
+
+# Read the file
+deg_data <- read_csv("/Users/jackzhou/Downloads/DEG_EGFP.csv") 
+deg_data <- read_excel("c_clusterStemVsTA_wil.xlsx", col_names = TRUE)
+
+# Preview the data
+head(deg_data)
+
+#=================================================================================
+#Pathway Enrichment in DAVID
+#=================================================================================
+#convert the gene symbol to ENSEMBL in c_clusterStemVsTA_wil_genelist by DAVID. Then read the list. 
+#6040 successful, 29 failed because of Ambiguous.
+#https://davidbioinformatics.nih.gov/conversion.jsp
+genelist <- read.table("c_clusterStemVsTA_wil_genelist_convert.txt", sep = "\t", header = TRUE)
+head(genelist, 5)
+colnames(genelist)[1] <- "Gene_Symbol"  
+colnames(genelist)[2] <- "ENSEMBL_ID"  
+
+#prepare the gene list for DAVID
+deg_data <- read_excel("c_clusterStemVsTA_wil.xlsx", col_names = TRUE)
+head(deg_data)
+
+#Extract the Upregulated Genes
+upregulated_genes <- deg_data %>%
+  filter(avg_log2FC > 0 & p_val_adj < 0.05) %>%
+  pull(Gene)
+
+# Write to a text file
+write.table(upregulated_genes, "C_clusterStemVsTA_wil_Upregulated_Genes.txt", 
+            quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+#Extract the Upregulated Genes
+downregulated_genes <- deg_data %>%
+  filter(avg_log2FC< 0 & p_val_adj < 0.05) %>%
+  pull(Gene)
+
+# Write to a text file
+write.table(downregulated_genes, "C_clusterStemVsTA_wil_Downregulated_Genes.txt", 
+            quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+#Go to DAVID: https://david.ncifcrf.gov/tools.jsp, 
+#Functional Annotation, generate Pathway Enrichment Analysis, generate csv file.
+#Current Gene List: C_clusterStemVsTA_wil_Upregulated_Genes
+#Current Background: Mus musculus
+#786 DAVID IDs
+
+# Read the CSV file
+
+Upregulated_DAVID <- read.csv("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/DAVID/C_clusterStemVsTA_wil_Upregulated_DAVID.csv", sep = "\t")
+write.xlsx(Upregulated_DAVID,"/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/DAVID/C_clusterStemVsTA_wil_Upregulated_DAVID.xlsx", rowNames=F)
+Upregulated_DAVID_pfilted <- Upregulated_DAVID  %>%
+  filter(PValue<0.05 &  Bonferroni < 0.05 & Benjamini < 0.05& FDR< 0.05) 
+head(Upregulated_DAVID_pfilted)
+write.xlsx(Upregulated_DAVID_pfilted,"/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/DAVID/Upregulated_DAVID_pfilted.xlsx", rowNames=F)
+#162 pathway left
+
+filtered_results <- Upregulated_DAVID %>%
+    filter(grepl("stem cell maintenance|differentiation|pluripotency", Term, ignore.case = TRUE))
+print(filtered_results)
+write.xlsx(filtered_results,"/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/DAVID/C_clusterStemVsTA_wil_Upregulated_DAVID_filtered.xlsx", rowNames=F)
+head(filtered_results)
+
+Upregulated_DAVID_candidate <- filtered_results  %>%
+  filter(PValue<0.05 &  Bonferroni < 0.05 & Benjamini < 0.05& FDR< 0.05) 
+head(Upregulated_DAVID_candidate)
+write.xlsx(Upregulated_DAVID_candidate,"/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/DAVID/Upregulated_DAVID_candidate.xlsx", rowNames=F)
