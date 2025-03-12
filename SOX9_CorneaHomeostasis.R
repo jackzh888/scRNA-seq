@@ -811,33 +811,6 @@ Heatmap(regulonAUC@assays$data$AUC[topTFs, ], cluster_rows = TRUE, cluster_colum
 
 print("SCENIC analysis completed for LSC_C12. Key Regulators Identified.")
 
-#=================================================================================
-### Gene Ontology (GO) Enrichment analysis and generate a network file for Cytoscape 
-# to generate a regulatory network and visualize it in Cytoscape  
-#=================================================================================
-if(!requireNamespace("BiocManager", quietly = TRUE))
-  install.packages("BiocManager")
-
-BiocManager::install("clusterProfiler")
-BiocManager::install("org.Mm.eg.db")  # For mouse dataset
-BiocManager::install("enrichplot")
-install.packages("readr")
-install.packages("writexl")
-
-library(clusterProfiler)
-library(org.Mm.eg.db)
-library(enrichplot)
-library(readr)
-library(writexl)
-library(tidyr)
-library(dplyr)
-
-# Read the file
-deg_data <- read_csv("/Users/jackzhou/Downloads/DEG_EGFP.csv") 
-deg_data <- read_excel("c_clusterStemVsTA_wil.xlsx", col_names = TRUE)
-
-# Preview the data
-head(deg_data)
 
 #=================================================================================
 #Pathway Enrichment in DAVID
@@ -889,10 +862,67 @@ write.xlsx(Upregulated_DAVID_pfilted,"/Users/jackzhou/Desktop/Project_Sox9/sox9_
 #162 pathway left
 
 filtered_results <- Upregulated_DAVID_pfilted %>%
-    filter(grepl("stem cell maintenance|differentiation|pluripotency|proliferation|stem cell|epithelial cell", Term, ignore.case = TRUE))
+    filter(grepl("stem cell maintenance|differentiation|pluripotency|proliferation|stem cell|epithelial cell", Term, ignore.case = TRUE))#
 print(filtered_results)
 write.xlsx(filtered_results,"/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/DAVID/C_clusterStemVsTA_wil_Upregulated_DAVID_stem.xlsx", rowNames=F)
 head(filtered_results)
 #2 pathway left.
+
+#=================================================================================
+# to generate a Cytoscape regulatory network from DAVID Pathway Results  
+#=================================================================================
+# Load required packages
+library(readr)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(openxlsx)
+
+# View the columns in your DAVID file (optional)
+david_results <- read_excel("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/DAVID/C_clusterStemVsTA_wil_Upregulated_DAVID_stem.xlsx", col_names = TRUE)
+
+colnames(david_results)
+
+# Extract Pathway Names and Gene List from DAVID results
+pathway_data <- david_results %>%
+  select(Term, Genes, PValue) %>%
+  mutate(Pathway = str_extract(Term, "^[^\\(]+"), # Extract pathway name
+         GeneList = strsplit(Genes, ", ")) %>% 
+  unnest(GeneList)
+
+# View the processed data (Pathway - Gene Mapping)
+head(pathway_data)
+
+# Save the Nodes File for Cytoscape
+write.csv(pathway_data,"/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/Cytoscape_Network/upDAVID_Pathway_Gene_Network.csv")
+
+# Generate Cytoscape Network Files (Nodes/Edges)
+#Nodes File: Lists each gene and pathway with p-values.
+#Edges File: Defines connections between genes and pathways.
+# Generate Nodes File (Genes + Pathways)
+nodes <- data.frame(
+  ID = unique(c(pathway_data$Pathway, pathway_data$GeneList)),
+  Label = unique(c(pathway_data$Pathway, pathway_data$GeneList)),
+  Type = ifelse(unique(c(pathway_data$Pathway, pathway_data$GeneList)) %in% pathway_data$Pathway, "Pathway", "Gene")
+)
+
+# Save Nodes File
+write_csv(nodes, "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/Cytoscape_Network/upDAVID_Nodes.csv")
+write.xlsx(nodes, "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/Cytoscape_Network/upDAVID_Nodes.xlsx")
+
+# Generate Edges File (Pathway ↔ Gene)
+edges <- data.frame(
+  Source = pathway_data$Pathway,
+  Target = pathway_data$GeneList,
+  Interaction = "associated_with"
+)
+
+# Save Edges File
+write_csv(edges, "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/Cytoscape_Network/upDAVID_Edges.csv")
+write.xlsx(edges, "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/Cytoscape_Network/upDAVID_Edges.xlsx")
+
+#Download Cytoscape : https://cytoscape.org/download.html
+
+
 
 
