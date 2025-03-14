@@ -246,7 +246,7 @@ Idents(sc_subset_c) = "orig.ident"
 sc_subset_c1 <- subset(sc_subset_c, subset = orig.ident == "Sample1")
 sc_subset_c2 <- subset(sc_subset_c, subset = orig.ident == "Sample2")
 
-counts_c<-GetAssayData(object = sc_subset_c ,  assay = "RNA", slot = "counts")
+counts_c<-GetAssayData(object = sc_subset_c ,  assay = "RNA", layer = "counts")
 sum(counts_c["EGFP-bGhpolyA",]>0)
 
 counts_c1<-GetAssayData(object = sc_subset_c1, assay = "RNA", slot = "counts")
@@ -297,6 +297,11 @@ barplot(cluster_counts_c_EGFP2$total_count )
 
 write.xlsx(cluster_counts_c_EGFP2,  "c_cluster_counts_EGFP2.xlsx")
 
+#Trpm8
+seurat_c$Trpm8_expr <- GetAssayData(object = sc_subset_c, assay = "RNA", slot = "counts")["Trpm8", ] > 0
+sum(counts_c["Trpm8",]>0)
+
+
 ###########################################################################################
 #Differential expression with respect to clusters
 markers_c <- FindAllMarkers(sc_subset_c, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
@@ -337,7 +342,7 @@ Idents(sc_subset_c) <- "seurat_clusters"
 ###################################################################################################
 # find the DEG markers of LSCs-EGFP vs TA
 ###################################################################################################
-stem_cluster <- "12"  # replace with the actual stem cell cluster ID
+stem_cluster <- 12  # replace with the actual stem cell cluster ID
 TA_cluster <-  c(5,7) # replace with TA cluster IDs
 Idents(sc_subset_c) <- "seurat_clusters" 
 #Wilcox
@@ -502,9 +507,9 @@ head(t(monocle_c@reducedDimS))
 
 
 
-#==================================================
-### Gene Set Enrichment Analysis (GSEA)
-#==================================================
+#=====================================================================================
+### Gene Set Enrichment Analysis (GSEA) from Molecular Signatures Database (MSigDB)
+#=====================================================================================
 
 #################################################################################
 #GSEA 1 : on the GSEA-MSigDB website, 
@@ -544,8 +549,11 @@ if (!requireNamespace("fgsea", quietly = TRUE)) {
 #####~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 library(fgsea)
 library(msigdbr)
+
+category = "C5" #"H": hallmark gene set; # C5: GO gene sets
+
 # Load MSigDB Gene Sets (Hallmark Pathway )
-hallmark_gene_sets <- msigdbr(species = "Mus musculus", category = "H")#Homo sapiens
+hallmark_gene_sets <- msigdbr(species = "Mus musculus", category = category)#Homo sapiens
 # Convert to list format for fgsea
 msigdb_list <- split(hallmark_gene_sets$gene_symbol, hallmark_gene_sets$gs_name)
 
@@ -558,7 +566,7 @@ fgsea_results <- fgsea(pathways = msigdb_list,
 
 
 #####~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#####Step 3 pathway selection 2: Load MSigDB Gene Sets associated with stem cell pathway
+#####Step 3 alternate pathway selection 2: Load MSigDB Gene Sets associated with stem cell pathway
 #####~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Load necessary libraries
 library(msigdbr)
@@ -568,18 +576,18 @@ library(dplyr)
 library(pheatmap)
 
 # 1: Load MSigDB Gene Sets (Stem Cell Pathways)
-msigdb <- msigdbr(species = "Mus musculus")
-stem_cell_pathways <- msigdb %>%
-  filter(grepl("stem|pluripotent|progenitor|self-renew|embryonic", gs_name, ignore.case = TRUE))
+#msigdb <- msigdbr(species = "Mus musculus")
+#stem_cell_pathways <- msigdb %>%
+#  filter(grepl("stem|pluripotent|progenitor|self-renew|embryonic", gs_name, ignore.case = TRUE))
 
 # 2: Prepare Gene Sets for GSEA
-gene_sets <- split(stem_cell_pathways$gene_symbol, stem_cell_pathways$gs_name)
+#gene_sets <- split(stem_cell_pathways$gene_symbol, stem_cell_pathways$gs_name)
 # 3: Run GSEA
-fgsea_results <- fgsea(pathways = gene_sets,
-                       stats = gene_list,
-                       minSize = 10,
-                       maxSize = 500,
-                       nperm = 10000)
+#fgsea_results <- fgsea(pathways = gene_sets,
+ #                      stats = gene_list,
+#                       minSize = 10,
+ #                      maxSize = 500,
+  #                     nperm = 10000)
 
 #####~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #####Step 4
@@ -593,9 +601,9 @@ head(fgsea_results)
 fgsea_results$leadingEdge <- sapply(fgsea_results$leadingEdge, function(x) paste(x, collapse = ";"))
 head(fgsea_results)
 
-# Save results 
-write.xlsx(fgsea_results, "c_GSEA_Hallmark_results.xlsx")
-write.xlsx(fgsea_results, "c_GSEA_StemCell_results.xlsx")
+# Save results # change the name based on GO or Hallmark.
+write.xlsx(fgsea_results, "c_GSEA_GO_results.xlsx")
+#write.xlsx(fgsea_results, "c_GSEA_StemCell_results.xlsx")
 #write.csv(fgsea_results, "c_GSEA_StemCell_results.csv", row.names = FALSE)
 
 
@@ -617,12 +625,53 @@ moderate_size_pathways <- significant_pathways %>%
 
 library(ggplot2)
 
-ggplot(significant_pathways, aes(x = reorder(pathway, NES), y = NES, fill = NES > 0)) +
+ggplot(moderate_size_pathways, aes(x = reorder(pathway, NES), y = NES, fill = NES > 0)) +
   geom_bar(stat = "identity") +
   coord_flip() +
   theme_minimal() +
   labs(title = "Top Enriched Pathways (FGSEA)", x = "Pathway", y = "Normalized Enrichment Score") +
   scale_fill_manual(values = c("red", "blue"), labels = c("Downregulated", "Upregulated"))
+#change the significant_pathways to top_upregulated for plot in upregulate genes only.
+
+## Generate gene File (Pathway and Genes list)
+library(tidyverse)  # Load required package
+
+# Convert 'significant_pathways' to long format
+GSEA_list <- significant_pathways %>%
+  select(Pathway = pathway, leadingEdge) %>%  # Select relevant columns
+  separate_rows(leadingEdge, sep = ";") %>%  # Split 'leadingEdge' into multiple rows
+  rename(Gene = leadingEdge)  # Rename column to 'Gene'
+
+# View the first few rows
+head(GSEA_list)
+
+significant_pathways$pathway
+
+HALLMARK1 <- significant_pathways[significant_pathways$pathway=="HALLMARK_ESTROGEN_RESPONSE_EARLY", ]
+HALLMARK2<- significant_pathways[significant_pathways$pathway=="HALLMARK_KRAS_SIGNALING_UP", ]
+HALLMARK3<- significant_pathways[significant_pathways$pathway=="HALLMARK_INTERFERON_GAMMA_RESPONSE", ]
+HALLMARK4<- significant_pathways[significant_pathways$pathway=="HALLMARK_IL2_STAT5_SIGNALING", ]
+HALLMARK5<- significant_pathways[significant_pathways$pathway=="HALLMARK_ESTROGEN_RESPONSE_LATE", ]
+
+# Select only the pathway and leadingEdge columns
+HALLMARK2 <- HALLMARK2 %>%
+  select(Pathway = pathway, leadingEdge) %>%
+  separate_rows(leadingEdge, sep = ";") %>%
+  rename(Gene = leadingEdge)
+
+HALLMARK4 <- HALLMARK4 %>%
+  select(Pathway = pathway, leadingEdge) %>%
+  separate_rows(leadingEdge, sep = ";") %>%
+  rename(Gene = leadingEdge)
+
+GSEA_overlap <- inner_join(HALLMARK2 ,HALLMARK4, by ="Gene" )
+head(GSEA_overlap) #Car2, Rabgap1l
+
+c_LSCSvsTA <- read_excel("c_clusterStemVsTA_wil.xlsx", sheet =1, col_names = TRUE)
+GSEA_overlap <- inner_join(HALLMARK4 ,c_LSCSvsTA, by ="Gene" )
+head(GSEA_overlap)
+# HALLMARK_KRAS_SIGNALING_UP ,c_LSCSvsTA: Pigr, Ano1, Slpi, Car2, Tspan13, Lcp1
+# HALLMARK_IL2_STAT5_SIGNALING ,c_LSCSvsTA: Car2, Nt5e, Muc1, Tnfsf10, P2rx4, Ctsz
 
 #==================================================
 ### SCENIC 
@@ -868,6 +917,64 @@ write.xlsx(filtered_results,"/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_Q
 head(filtered_results)
 #2 pathway left.
 
+#list the gene in pathway
+filtered_results$Term
+#[1] "GO:0042127~regulation of cell population proliferation"         
+#[2] "GO:0008285~negative regulation of cell population proliferation"
+#[3] "GO:0008284~positive regulation of cell population proliferation"
+#[4] "GO:0045597~positive regulation of cell differentiation"         
+#[5] "GO:0050678~regulation of epithelial cell proliferation"         
+#[6] "GO:0045595~regulation of cell differentiation" 
+
+David1 <-filtered_results[ filtered_results$Term=="GO:0042127~regulation of cell population proliferation"  ,]
+head(David1)
+# Select only the pathway and genes
+David1_genes <- David1 %>%
+  select(pathway=Term, Genes) %>%
+  separate_rows(Genes, sep = ",") %>%
+  rename(Gene = Genes)
+head(David1_genes)
+
+David2 <-filtered_results[ filtered_results$Term=="GO:0008285~negative regulation of cell population proliferation"  ,]
+head(David1)
+# Select only the pathway and genes
+David2_genes <- David2 %>%
+  select(pathway=Term, Genes) %>%
+  separate_rows(Genes, sep = ",") %>%
+  rename(Gene = Genes)
+head(David2_genes)
+
+David3 <-filtered_results[ filtered_results$Term=="GO:0008284~positive regulation of cell population proliferation"  ,]
+head(David1)
+# Select only the pathway and genes
+David3_genes <- David3 %>%
+  select(pathway=Term, Genes) %>%
+  separate_rows(Genes, sep = ",") %>%
+  rename(Gene = Genes)
+head(David3_genes)
+
+David4 <-filtered_results[ filtered_results$Term=="GO:0050678~regulation of epithelial cell proliferation"  ,]
+head(David1)
+#Select only the pathway and genes
+David4_genes <- David4 %>%
+  select(pathway=Term, Genes) %>%
+  separate_rows(Genes, sep = ",") %>%
+  rename(Gene = Genes)
+head(David4_genes)
+
+David5 <-filtered_results[ filtered_results$Term=="GO:0045595~regulation of cell differentiation"  ,]
+head(David1)
+#Select only the pathway and genes
+David5_genes <- David5 %>%
+  select(pathway=Term, Genes) %>%
+  separate_rows(Genes, sep = ",") %>%
+  rename(Gene = Genes)
+head(David5_genes)
+
+c_LSCSvsTA <- read_excel("c_clusterStemVsTA_wil.xlsx", sheet =1, col_names = TRUE)
+David_overlap <- inner_join(David5_genes,c_LSCSvsTA, by="Gene")
+David_overlap 
+
 #=================================================================================
 # to generate a Cytoscape regulatory network from DAVID Pathway Results  
 #=================================================================================
@@ -923,6 +1030,58 @@ write.xlsx(edges, "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/Cytoscap
 
 #Download Cytoscape : https://cytoscape.org/download.html
 
+#=================================================================================
+#  scNetViz in Cytoscape   
+#=================================================================================
+#
+#generate filtered expression matrix from the 12 cluster
 
+# Subset Seurat object for Cluster 12
+cluster12_cells <- subset(sc_subset_c, idents = "12")  # Change "12" to any cluster of interest
+#Raw counts (recommended for further processing):
+cluster12_matrix <- as.data.frame(GetAssayData(cluster1_cells, layer = "counts"))
+#Log-normalized expression (for visualization):
+#cluster12_matrix <- as.data.frame(GetAssayData(cluster1_cells, slot = "data"))
+write.csv(cluster12_matrix, "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/Cytoscape_Network/c_expression_matrix_cluster12.csv", row.names = TRUE)
+#If extracting multiple clusters, adjust the filename accordingly:
+#write.csv(as.data.frame(GetAssayData(selected_clusters, slot = "counts")), x`x`"expression_matrix_clusters_1_3_5.csv", row.names = TRUE)
+  
 
+#####filtered expression matrix into Cytoscape using scNetViz
+
+# Remove genes expressed in fewer than 10 cells
+filtered_cluster12_matrix <- cluster12_matrix[rowSums(cluster12_matrix > 0) >= 10, ]
+
+# Save filtered matrix
+write.csv(filtered_cluster12_matrix, "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/Cytoscape_Network/c_filtered_expression_matrix_cluster12.csv", row.names = TRUE)
+
+#Filter for Highly Variable Genes(option)
+VariableFeatures(cluster12_cells) <- FindVariableFeatures(cluster12_cells, selection.method = "vst", nfeatures = 2000)
+filtered_matrix_variable <- cluster12_matrix[VariableFeatures(cluster12_cells), ]
+
+write.csv(filtered_matrix_variable, "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/Cytoscape_Network/c_variable_genes_expression_matrix_cluster12.csv", row.names = TRUE)
+
+#Export Metadata for Cytoscape
+cluster12_metadata <- cluster12_cells@meta.data
+write.csv(cluster12_metadata, "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/Cytoscape_Network/c_filtered_cell_metadata_cluster12.csv", row.names = TRUE)
+
+###Import into Cytoscape (scNetViz)
+
+##Convert CSV to MTX Format in R
+
+# Load necessary library
+library(Seurat)
+library(Matrix)
+
+# Convert to sparse matrix format
+sparse_matrix <- as(as.matrix(filtered_matrix_variable), "dgCMatrix")
+
+# Save as MTX format
+writeMM(sparse_matrix, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/Cytoscape_Network/c_filtered_expression_matrix_cluster12.mtx")
+
+# Save genes (rows) as TSV
+write.table(rownames(filtered_matrix_variable), file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/Cytoscape_Network/c_genes.tsv", sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE)
+
+# Save cells (columns) as TSV
+write.table(colnames(filtered_matrix_variable), file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/Cytoscape_Network/c_barcodes.tsv", sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE)
 
