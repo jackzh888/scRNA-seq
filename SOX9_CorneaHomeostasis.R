@@ -350,15 +350,45 @@ c_clusterStemVsTA_wil<- FindMarkers(sc_subset_c, ident.1 = stem_cluster , ident.
                                     min.pct = 0.25, logfc.threshold = 0.25) #only.pos = TRUE 
 head(c_clusterStemVsTA_wil)
 write.xlsx(c_clusterStemVsTA_wil, file = "c_clusterStemVsTA_wil.xlsx", rowNames=T)
+
+#filter by p_val_adj<0.05
+head(c_clusterStemVsTA_wil)
+c_clusterStemVsTA_wil_filter <- filter (c_clusterStemVsTA_wil, p_val_adj<0.05)%>%
+    arrange(avg_log2FC)
+head(c_clusterStemVsTA_wil_filter) 
+
+#lost genes name by saving, so
+#in order to save it to excel with gene name.
+df <- as.data.frame.matrix(c_clusterStemVsTA_wil_filter)
+head(df)
+
+#The gene names are actually stored as row names.generate new column with Gene name.
+df <- df %>% rownames_to_column(var = "Gene") # Move row names into a new column
+#df <- df[, -1]
+write.xlsx(df, file = "c_clusterStemVsTA_wil_filter.xlsx", rowNames = TRUE) 
+
 #Roc
 c_clusterStemVsTA_roc<- FindMarkers(sc_subset_c, ident.1 = stem_cluster , ident.2 = TA_cluster , test.use="roc",
                                     min.pct = 0.25, logfc.threshold = 0.25)
+head(c_clusterStemVsTA_roc)
 write.xlsx(c_clusterStemVsTA_roc, file = "c_clusterStemVsTA_roc.xlsx", rowNames=T)
+
+#filter by myAUC
+head(c_clusterStemVsTA_roc)
+c_clusterStemVsTA_roc_filter <- filter (c_clusterStemVsTA_roc, myAUC>0.7)%>%
+  arrange(avg_log2FC)
+head(c_clusterStemVsTA_roc_filter) 
+write.xlsx(c_clusterStemVsTA_roc_filter, file="c_clusterStemVsTA_roc_filter.xlsx", rownames=T)
+
+#Overlap Wilcon and Roc
+c_clusterStemVsTA_overlap_filter <- inner_join(c_clusterStemVsTA_wil_filter, c_clusterStemVsTA_roc_filter, by )
 
 #adding the column name with 'Gene', then read the file 
 c_clusterStemVsTA_wil <- read_excel("c_clusterStemVsTA_wil.xlsx",  col_names = TRUE)
 c_clusterStemVsTA_roc <- read_excel("c_clusterStemVsTA_roc.xlsx",  col_names = TRUE)
 avg_exp <- read_excel("c_avg_exp.xlsx",  col_names = TRUE)
+
+ 
 
 #inner_join the two statistics test results from wilcoxin and roc 
 c_cluster12vsTA_wil_roc_join <- inner_join(c_clusterStemVsTA_wil, c_clusterStemVsTA_roc, by="Gene")
@@ -368,7 +398,6 @@ c_cluster12vsTA_wil_roc_Aveexp <- avg_exp  %>%
   inner_join(c_clusterStemVsTA_wil, by = "Gene")%>%
   inner_join(c_clusterStemVsTA_roc, by = "Gene") 
 write.xlsx(c_cluster12vsTA_wil_roc_Aveexp, "c_cluster12vsTA_wil_roc_Aveexp.xlsx", rowNames=F)
-
 
 #==================================================
 ### pathway 
@@ -449,6 +478,66 @@ cycle_percentage_c_heatmap <- pheatmap(
 )
 dev.off()
 
+##################################################
+#Using Monocle For Pseudotime Trajectory (Time permits)
+##################################################
+#https://monashbioinformaticsplatform.github.io/Single-Cell-Workshop/pbmc3k_tutorial.html#Finding_differentially_expressed_features_(cluster_biomarkers)
+
+library(monocle3)
+library(SeuratWrappers)
+
+cds <- as.cell_data_set(sc_subset_c)
+cds
+
+cds <- cluster_cells(cds, k = 10, random_seed = 5)
+p1 <- plot_cells(cds, show_trajectory_graph = FALSE)
+p2 <- plot_cells(cds, color_cells_by = "partition", show_trajectory_graph = FALSE)
+#install.packages("patchwork")  # Install if not already installed
+library(patchwork)  # Load the package
+wrap_plots(p1, p2)
+
+cds <- learn_graph(cds)
+plot_cells(cds, color_cells_by = "partition", label_groups_by_cluster = FALSE, label_leaves = FALSE,
+           label_branch_points = FALSE)
+
+head(colData(cds))
+head(sc_subset_c)
+
+# Create a vector of idents to keep
+selected_ids <- c("2", "3", "4","5", "7",  "9", "10",  "12")
+cells_sc_subset_c <- subset(sc_subset_c, idents = selected_ids)  ## subset the PBMC seurat object to tcells
+cds <- as.cell_data_set(sc_subset_c)  ## convert this to cell_data_set
+cds <- cluster_cells(cds)
+cds <- learn_graph(cds)
+plot_cells(cds, label_groups_by_cluster = FALSE, label_leaves = FALSE, label_branch_points = FALSE)
+
+#to order cells in pseudotime
+get_earliest_principal_node <- function(cds, cell_type = "12") {
+  cell_ids <- which(colData(cds)[, "ident"] == cell_type)
+  
+  closest_vertex <- cds@principal_graph_aux$UMAP$pr_graph_cell_proj_closest_vertex
+  closest_vertex <- as.matrix(closest_vertex[colnames(cds), ])
+  root_pr_nodes <- igraph::V(principal_graph(cds)$UMAP)$name[as.numeric(names(which.max(table(closest_vertex[cell_ids,
+  ]))))]
+  
+  root_pr_nodes
+}
+cds <- order_cells(cds, root_pr_nodes = get_earliest_principal_node(cds))
+
+plot_cells(cds, color_cells_by = "pseudotime", label_cell_groups = FALSE, label_leaves = FALSE,
+           label_branch_points = FALSE)
+plot_cells(cds, color_cells_by = "ident", label_cell_groups = FALSE, label_leaves = FALSE, label_branch_points = FALSE)
+
+
+
+
+
+
+
+
+
+
+
 
 #==================================================
 ### Pseudotime: 
@@ -458,6 +547,77 @@ dev.off()
 ##########################################################################################
 ##Pseudotime 1:Monocle
 ##########################################################################################
+
+#subset cells of LSCS, TA, Dif
+head(sc_subset_c@meta.data)
+sc_subset_c <- SetIdent(sc_subset_c, value = "seurat_clusters")
+levels(sc_subset_c)
+table(Idents(sc_subset_c))
+
+# subset of 3 clusters from whole data
+LSC <- subset(sc_subset_c, idents=c(2,3,4,5,7,9,10, 12))
+LSC@active.assay <-'RNA'
+LSC_norm <- NormalizeData(LSC, normalization.method = "LogNormalize", scale.factor = 10000)
+LSC_norm$cluster <- LSC_norm@active.ident
+
+# Assign cluster names
+cidents <- c("Dif1_C2", "Dif2_C3", "Dif3_D4" "TA_C5","TA_C7","LSC_C9","Dif4_D10","LSC_C12")
+table(LSC_norm@active.ident)
+new.cluster.ids <- c("Dif1_C2", "Dif2_C3", "Dif3_D4" "TA_C5","TA_C7","LSC_C9","Dif4_D10","LSC_C12")
+names(new.cluster.ids) <- levels(LSC_norm)
+LSC_norm <- RenameIdents(LSC_norm, new.cluster.ids)
+
+# use for "Dif1_C2", "Dif2_C3", "Dif3_D4" "TA_C5","TA_C7","LSC_C9","Dif4_D10"
+# Generate subset matrix
+for (i in 1:7) {
+  #i=9
+  cid <- cidents[i]
+  LSC_s1 <- subset(LSC_norm, idents = cid)
+  LSC_s1_matrix <- as.matrix(GetAssayData(LSC_s1,slot = "counts"))
+  LSC_s1_matrix <- as.data.frame(LSC_s1_matrix)
+  sets_n = floor(length(colnames(LSC_s1))/20)
+  LSC_s1_matrix<-t(LSC_s1_matrix)
+  LSC_s1_matrix <- as.data.frame(LSC_s1_matrix)
+  V<-rep(1:sets_n, each=20)
+  set.seed(001) # just to make it reproducible
+  V<-sample(V)
+  LSC_s1_matrix_split<-split(LSC_s1_matrix,V)
+  round(0.11,0)
+  List<-list()
+  for (j in 1:sets_n){
+    #      normF<-colMeans(LSC_s1_matrix_split[[j]])
+    normF<-round(colMeans(LSC_s1_matrix_split[[j]]),0)
+    List[[j]] <- normF
+  }
+  
+  LSC_s1_mean <- do.call(rbind, List)
+  LSC_s1_mean <- t(LSC_s1_mean)
+  LSC_s1_mean <- as.data.frame(LSC_s1_mean)
+  colnames(LSC_s1_mean) <- paste0(cid,'_',colnames(LSC_s1_mean))
+  head(colnames(LSC_s1_mean))
+  fout <- paste0("LSC_",cid,".csv")
+  write.csv(LSC_s1_mean, fout)
+  print(dim(LSC_s1_mean))
+  
+  rm(LSC_s1)
+  rm(LSC_s1_mean)
+}
+
+# use for LSC12
+i=3
+cid <- cidents[i]
+LSC_s1 <- subset(LSC_norm, idents = cid)
+#LSC_s1_matrix <- as.matrix(LSC_s1[["RNA"]]@data)
+LSC_s1_matrix <- as.matrix(GetAssayData(LSC_s1,slot = "counts"))
+LSC_s1_matrix <- as.data.frame(LSC_s1_matrix)
+colnames(LSC_s1_matrix) <- paste0(cid,'_',colnames(LSC_s1_matrix))
+head(colnames(LSC_s1_matrix))
+fout <- paste0("LSC_",cid,".csv")
+write.csv(LSC_s1_matrix, fout)
+print(dim(LSC_s1_matrix))
+
+
+
 library(monocle3)
 # source the R script
 source("https://uic-ric.github.io/workshop-data/scrna/importCDS2.R")
@@ -550,7 +710,7 @@ if (!requireNamespace("fgsea", quietly = TRUE)) {
 library(fgsea)
 library(msigdbr)
 
-category = "C5" #"H": hallmark gene set; # C5: GO gene sets
+category = "H" #"H": hallmark gene set; # C5: GO gene sets
 
 # Load MSigDB Gene Sets (Hallmark Pathway )
 hallmark_gene_sets <- msigdbr(species = "Mus musculus", category = category)#Homo sapiens
@@ -561,8 +721,7 @@ msigdb_list <- split(hallmark_gene_sets$gene_symbol, hallmark_gene_sets$gs_name)
 fgsea_results <- fgsea(pathways = msigdb_list, 
                        stats = gene_list, 
                        minSize = 15, 
-                       maxSize = 500, 
-                       nperm = 1000)
+                       maxSize = 500)
 
 
 #####~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -602,7 +761,7 @@ fgsea_results$leadingEdge <- sapply(fgsea_results$leadingEdge, function(x) paste
 head(fgsea_results)
 
 # Save results # change the name based on GO or Hallmark.
-write.xlsx(fgsea_results, "c_GSEA_GO_results.xlsx")
+write.xlsx(fgsea_results, "c_GSEA_Hallmark_results.xlsx")
 #write.xlsx(fgsea_results, "c_GSEA_StemCell_results.xlsx")
 #write.csv(fgsea_results, "c_GSEA_StemCell_results.csv", row.names = FALSE)
 
@@ -625,7 +784,7 @@ moderate_size_pathways <- significant_pathways %>%
 
 library(ggplot2)
 
-ggplot(moderate_size_pathways, aes(x = reorder(pathway, NES), y = NES, fill = NES > 0)) +
+ggplot(significant_pathways, aes(x = reorder(pathway, NES), y = NES, fill = NES > 0)) +
   geom_bar(stat = "identity") +
   coord_flip() +
   theme_minimal() +
@@ -636,42 +795,55 @@ ggplot(moderate_size_pathways, aes(x = reorder(pathway, NES), y = NES, fill = NE
 ## Generate gene File (Pathway and Genes list)
 library(tidyverse)  # Load required package
 
+colnames(significant_pathways)
 # Convert 'significant_pathways' to long format
 GSEA_list <- significant_pathways %>%
-  select(Pathway = pathway, leadingEdge) %>%  # Select relevant columns
+  select(pathway = pathway, leadingEdge, pval,padj, log2err, ES, NES,size ) %>%  # Select relevant columns
   separate_rows(leadingEdge, sep = ";") %>%  # Split 'leadingEdge' into multiple rows
   rename(Gene = leadingEdge)  # Rename column to 'Gene'
 
 # View the first few rows
 head(GSEA_list)
 
+# View sorted pathway names
+significant_pathways <- significant_pathways %>% arrange(desc(NES))
 significant_pathways$pathway
 
-HALLMARK1 <- significant_pathways[significant_pathways$pathway=="HALLMARK_ESTROGEN_RESPONSE_EARLY", ]
-HALLMARK2<- significant_pathways[significant_pathways$pathway=="HALLMARK_KRAS_SIGNALING_UP", ]
-HALLMARK3<- significant_pathways[significant_pathways$pathway=="HALLMARK_INTERFERON_GAMMA_RESPONSE", ]
-HALLMARK4<- significant_pathways[significant_pathways$pathway=="HALLMARK_IL2_STAT5_SIGNALING", ]
-HALLMARK5<- significant_pathways[significant_pathways$pathway=="HALLMARK_ESTROGEN_RESPONSE_LATE", ]
+HALLMARK1<- significant_pathways[significant_pathways$pathway=="HALLMARK_KRAS_SIGNALING_UP", ]
+HALLMARK2<- significant_pathways[significant_pathways$pathway=="HALLMARK_IL2_STAT5_SIGNALING", ]
+HALLMARK3<- significant_pathways[significant_pathways$pathway=="HALLMARK_G2M_CHECKPOINT", ]
+
+HALLMARK4 <- significant_pathways[significant_pathways$pathway=="HALLMARK_ESTROGEN_RESPONSE_EARLY", ]
+HALLMARK5<- significant_pathways[significant_pathways$pathway=="HALLMARK_INTERFERON_GAMMA_RESPONSE", ]
+HALLMARK6<- significant_pathways[significant_pathways$pathway=="HALLMARK_ESTROGEN_RESPONSE_LATE", ]
 
 # Select only the pathway and leadingEdge columns
+HALLMARK1 <- HALLMARK1 %>%
+  select(Pathway = pathway,leadingEdge, pval,padj, log2err, ES, NES,size) %>%
+  separate_rows(leadingEdge, sep = ";") %>%
+  rename(Gene = leadingEdge)
+
 HALLMARK2 <- HALLMARK2 %>%
-  select(Pathway = pathway, leadingEdge) %>%
+  select(Pathway = pathway,leadingEdge, pval,padj, log2err, ES, NES,size) %>%
   separate_rows(leadingEdge, sep = ";") %>%
   rename(Gene = leadingEdge)
 
-HALLMARK4 <- HALLMARK4 %>%
-  select(Pathway = pathway, leadingEdge) %>%
+HALLMARK3 <- HALLMARK3 %>%
+  select(Pathway = pathway, leadingEdge, pval,padj, log2err, ES, NES,size) %>%
   separate_rows(leadingEdge, sep = ";") %>%
   rename(Gene = leadingEdge)
 
-GSEA_overlap <- inner_join(HALLMARK2 ,HALLMARK4, by ="Gene" )
-head(GSEA_overlap) #Car2, Rabgap1l
+GSEA_overlap <- inner_join(HALLMARK2 ,HALLMARK3, by ="Gene" )
+head(GSEA_overlap) 
+#Overlap: HALLMARK1n2n3: 0. 1n2: Car2, Rabgap1l.1n3: 0. 2n3: 0
 
-c_LSCSvsTA <- read_excel("c_clusterStemVsTA_wil.xlsx", sheet =1, col_names = TRUE)
-GSEA_overlap <- inner_join(HALLMARK4 ,c_LSCSvsTA, by ="Gene" )
-head(GSEA_overlap)
-# HALLMARK_KRAS_SIGNALING_UP ,c_LSCSvsTA: Pigr, Ano1, Slpi, Car2, Tspan13, Lcp1
-# HALLMARK_IL2_STAT5_SIGNALING ,c_LSCSvsTA: Car2, Nt5e, Muc1, Tnfsf10, P2rx4, Ctsz
+c_LSCSvsTA_filter <- read_excel("c_clusterStemVsTA_wil_filter.xlsx", sheet =1, col_names = TRUE)
+GSEA_overlap <- inner_join(HALLMARK2 ,c_LSCSvsTA_filter, by ="Gene" )
+head(GSEA_overlap$Gene)
+write.xlsx(GSEA_overlap, "c_LSCSvsTA_wil_filter_overlapGSEA_HALLMARK_IL2_STAT5_SIGNALING.xlsx")
+
+setwd("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/GSEA")  
+write.xlsx(GSEA_overlap, "c_GSEA_LSCSvsTA_HALLMARK_G2M_CHECKPOINT.xlsx")
 
 #==================================================
 ### SCENIC 
@@ -690,7 +862,7 @@ sc_subset_c <- SetIdent(sc_subset_c, value = "seurat_clusters")
 levels(sc_subset_c)
 table(Idents(sc_subset_c))
 
-# subset of 9 clusters from whole data
+# subset of 3 clusters from whole data
 LSC <- subset(sc_subset_c, idents=c(5,7,12))
 LSC@active.assay <-'RNA'
 LSC_norm <- NormalizeData(LSC, normalization.method = "LogNormalize", scale.factor = 10000)
@@ -791,8 +963,7 @@ set.seed(123)
 weightMat <- GENIE3(exprMat_filtered)
 
 # Step 5: Identify Regulons using RcisTarget
-
-#the code doesn't works
+#################
 list.files("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/SCENIC_databases/")
 load("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/SCENIC_databases/motifAnnotations_mgi.RData")
 #https://github.com/aertslab/RcisTarget/blob/master/data/motifAnnotations_mgi.RData
@@ -813,6 +984,7 @@ exprMat_filtered <- as(exprMat_filtered, "CsparseMatrix")  # Convert to sparse m
 class(weightMat)  # Should return "dgCMatrix"
 class(exprMat_filtered)  # Should return "dgCMatrix"
 
+#the code doesn't works
 #issue with codes origin?
 regulons <- SCENIC::runSCENIC_1_coexNetwork2modules(weightMat, exprMat_filtered)
 
@@ -864,116 +1036,163 @@ print("SCENIC analysis completed for LSC_C12. Key Regulators Identified.")
 #=================================================================================
 #Pathway Enrichment in DAVID
 #=================================================================================
-#convert the gene symbol to ENSEMBL in c_clusterStemVsTA_wil_genelist by DAVID. Then read the list. 
-#6040 successful, 29 failed because of Ambiguous.
+
 #https://davidbioinformatics.nih.gov/conversion.jsp
-genelist <- read.table("c_clusterStemVsTA_wil_genelist_convert.txt", sep = "\t", header = TRUE)
-head(genelist, 5)
-colnames(genelist)[1] <- "Gene_Symbol"  
-colnames(genelist)[2] <- "ENSEMBL_ID"  
+#c_clusterStemVsTA_wil_genelist.txt
+#official_gene_symbol
+#Mus musculus
+#gene list
+#gene ontology: goterm_bp_fat, 
+#pathway: kegg
+#Functional Annotation Chart
+#2009 chart records
 
-#prepare the gene list for DAVID
-deg_data <- read_excel("c_clusterStemVsTA_wil.xlsx", col_names = TRUE)
-head(deg_data)
+#convert the filtered gene symbol to ENSEMBL in c_clusterStemVsTA_wil_genelist by DAVID. Then read the list. 
+  #1123 genes.
+    
+    genelist <- read.table("c_clusterStemVsTA_wil_genelist_convert.txt", sep = "\t", header = TRUE)
+    head(genelist, 5)
+    colnames(genelist)[1] <- "Gene_Symbol"  
+    colnames(genelist)[2] <- "ENSEMBL_ID"  
+    
+    #prepare the gene list for DAVID
+    deg_data <- read_excel("c_clusterStemVsTA_wil_filter.xlsx", col_names = TRUE)
+    head(deg_data)
+    
+    #Extract the Upregulated Genes
+    upregulated_genes <- deg_data %>%
+      filter(avg_log2FC > 0 & p_val_adj < 0.05) %>%
+      pull(Gene)
+    
+    # Write to a text file
+    write.table(upregulated_genes, "C_clusterStemVsTA_wil_Upregulated_Genes.txt", 
+                quote = FALSE, row.names = FALSE, col.names = FALSE)
+    
+    #Extract the Downregulated Genes
+    downregulated_genes <- deg_data %>%
+      filter(avg_log2FC< 0 & p_val_adj < 0.05) %>%
+      pull(Gene)
+    
+    # Write to a text file
+    write.table(downregulated_genes, "C_clusterStemVsTA_wil_Downregulated_Genes.txt", 
+                quote = FALSE, row.names = FALSE, col.names = FALSE)
+    
+    #Go to DAVID: https://david.ncifcrf.gov/tools.jsp, 
+    #Functional Annotation, generate Pathway Enrichment Analysis, generate csv file.
+    #Current Gene List: C_clusterStemVsTA_wil_Upregulated_Genes
+    #Current Background: Mus musculus
+    #786 DAVID IDs
+    
+    # Read the CSV file
+    
+    Upregulated_DAVID <- read.csv("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/DAVID/C_clusterStemVsTA_wil_Upregulated_DAVID.csv", sep = "\t")
+    write.xlsx(Upregulated_DAVID,"/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/DAVID/C_clusterStemVsTA_wil_Upregulated_DAVID.xlsx", rowNames=F)
+    Upregulated_DAVID_pfilted <- Upregulated_DAVID  %>%
+      filter(PValue<0.05 &  Bonferroni < 0.05 & Benjamini < 0.05& FDR< 0.05) 
+    head(Upregulated_DAVID_pfilted)
+    write.xlsx(Upregulated_DAVID_pfilted,"/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/DAVID/Upregulated_DAVID_pfilted.xlsx", rowNames=F)
+    #162 Functional Annotation chart records left
+    
+    #david websit maintaining.
+    downregulated_DAVID_pfilted <- downregulated_DAVID  %>%
+      filter(PValue<0.05 &  Bonferroni < 0.05 & Benjamini < 0.05& FDR< 0.05) 
+    head(downregulated_DAVID_pfilted)
+    write.xlsx(Upregulated_DAVID_pfilted,"/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/DAVID/Upregulated_DAVID_pfilted.xlsx", rowNames=F)
+    
+    filtered_results <- Upregulated_DAVID_pfilted %>%
+        filter(grepl("stem cell maintenance|differentiation|pluripotency|proliferation|stem cell|epithelial cell", Term, ignore.case = TRUE))#
+    print(filtered_results)
+    write.xlsx(filtered_results,"/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/DAVID/C_clusterStemVsTA_wil_Upregulated_DAVID_stem.xlsx", rowNames=F)
+    head(filtered_results)
+    #6 Functional Annotation chart records left.
+    
+    #list the gene in pathway
+    filtered_results$Term
+    #[1] "GO:0042127~regulation of cell population proliferation"         
+    #[2] "GO:0008285~negative regulation of cell population proliferation"
+    #[3] "GO:0008284~positive regulation of cell population proliferation"
+    #[4] "GO:0045597~positive regulation of cell differentiation"   # did not match       
+    #[5] "GO:0050678~regulation of epithelial cell proliferation"         
+    #[6] "GO:0045595~regulation of cell differentiation" 
+    
+    David1 <-filtered_results[ filtered_results$Term=="GO:0042127~regulation of cell population proliferation"  ,]
+    head(David1)
+    # Select only the pathway and genes
+    David1_genes <- David1 %>%
+      select(pathway=Term, Genes) %>%
+      separate_rows(Genes, sep = ",") %>%
+      rename(Gene = Genes)
+    
+    #capitalize only the first letter of each gene symbol while keeping the rest in lowercase
+    library(dplyr)
+    library(stringr)
+    # Trim spaces and capitalize first letter only
+    David1_genes <- David1_genes %>%
+      mutate(Gene = str_to_title(str_trim(Gene)))
+    head(David1_genes)
+    
+    David2 <-filtered_results[ filtered_results$Term=="GO:0008285~negative regulation of cell population proliferation"  ,]
+    head(David1)
+    # Select only the pathway and genes
+    David2_genes <- David2 %>%
+      select(pathway=Term, Genes) %>%
+      separate_rows(Genes, sep = ",") %>%
+      rename(Gene = Genes)
+    # Trim spaces and capitalize first letter only
+    David2_genes <- David2_genes %>%
+      mutate(Gene = str_to_title(str_trim(Gene)))
+    head(David2_genes)
+    
+    David3 <-filtered_results[ filtered_results$Term=="GO:0008284~positive regulation of cell population proliferation"  ,]
+    head(David1)
+    # Select only the pathway and genes
+    David3_genes <- David3 %>%
+      select(pathway=Term, Genes) %>%
+      separate_rows(Genes, sep = ",") %>%
+      rename(Gene = Genes)
+    # Trim spaces and capitalize first letter only
+    David3_genes <- David3_genes %>%
+      mutate(Gene = str_to_title(str_trim(Gene)))
+    head(David3_genes)
+    
+    David4 <-filtered_results[ filtered_results$Term=="GO:0050678~regulation of epithelial cell proliferation"  ,]
+    head(David1)
+    #Select only the pathway and genes
+    David4_genes <- David4 %>%
+      select(pathway=Term, Genes) %>%
+      separate_rows(Genes, sep = ",") %>%
+      rename(Gene = Genes)
+    # Trim spaces and capitalize first letter only
+    David4_genes <- David4_genes %>%
+      mutate(Gene = str_to_title(str_trim(Gene)))
+    head(David4_genes)
+    
+    David5 <-filtered_results[ filtered_results$Term=="GO:0045595~regulation of cell differentiation"  ,]
+    head(David1)
+    #Select only the pathway and genes
+    David5_genes <- David5 %>%
+      select(pathway=Term, Genes) %>%
+      separate_rows(Genes, sep = ",") %>%
+      rename(Gene = Genes)
+    head(David5_genes)
+    # Trim spaces and capitalize first letter only
+    David5_genes <- David5_genes %>%
+      mutate(Gene = str_to_title(str_trim(Gene)))
 
-#Extract the Upregulated Genes
-upregulated_genes <- deg_data %>%
-  filter(avg_log2FC > 0 & p_val_adj < 0.05) %>%
-  pull(Gene)
-
-# Write to a text file
-write.table(upregulated_genes, "C_clusterStemVsTA_wil_Upregulated_Genes.txt", 
-            quote = FALSE, row.names = FALSE, col.names = FALSE)
-
-#Extract the Upregulated Genes
-downregulated_genes <- deg_data %>%
-  filter(avg_log2FC< 0 & p_val_adj < 0.05) %>%
-  pull(Gene)
-
-# Write to a text file
-write.table(downregulated_genes, "C_clusterStemVsTA_wil_Downregulated_Genes.txt", 
-            quote = FALSE, row.names = FALSE, col.names = FALSE)
-
-#Go to DAVID: https://david.ncifcrf.gov/tools.jsp, 
-#Functional Annotation, generate Pathway Enrichment Analysis, generate csv file.
-#Current Gene List: C_clusterStemVsTA_wil_Upregulated_Genes
-#Current Background: Mus musculus
-#786 DAVID IDs
-
-# Read the CSV file
-
-Upregulated_DAVID <- read.csv("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/DAVID/C_clusterStemVsTA_wil_Upregulated_DAVID.csv", sep = "\t")
-write.xlsx(Upregulated_DAVID,"/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/DAVID/C_clusterStemVsTA_wil_Upregulated_DAVID.xlsx", rowNames=F)
-Upregulated_DAVID_pfilted <- Upregulated_DAVID  %>%
-  filter(PValue<0.05 &  Bonferroni < 0.05 & Benjamini < 0.05& FDR< 0.05) 
-head(Upregulated_DAVID_pfilted)
-write.xlsx(Upregulated_DAVID_pfilted,"/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/DAVID/Upregulated_DAVID_pfilted.xlsx", rowNames=F)
-#162 pathway left
-
-filtered_results <- Upregulated_DAVID_pfilted %>%
-    filter(grepl("stem cell maintenance|differentiation|pluripotency|proliferation|stem cell|epithelial cell", Term, ignore.case = TRUE))#
-print(filtered_results)
-write.xlsx(filtered_results,"/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/DAVID/C_clusterStemVsTA_wil_Upregulated_DAVID_stem.xlsx", rowNames=F)
-head(filtered_results)
-#2 pathway left.
-
-#list the gene in pathway
-filtered_results$Term
-#[1] "GO:0042127~regulation of cell population proliferation"         
-#[2] "GO:0008285~negative regulation of cell population proliferation"
-#[3] "GO:0008284~positive regulation of cell population proliferation"
-#[4] "GO:0045597~positive regulation of cell differentiation"         
-#[5] "GO:0050678~regulation of epithelial cell proliferation"         
-#[6] "GO:0045595~regulation of cell differentiation" 
-
-David1 <-filtered_results[ filtered_results$Term=="GO:0042127~regulation of cell population proliferation"  ,]
-head(David1)
-# Select only the pathway and genes
-David1_genes <- David1 %>%
-  select(pathway=Term, Genes) %>%
-  separate_rows(Genes, sep = ",") %>%
-  rename(Gene = Genes)
-head(David1_genes)
-
-David2 <-filtered_results[ filtered_results$Term=="GO:0008285~negative regulation of cell population proliferation"  ,]
-head(David1)
-# Select only the pathway and genes
-David2_genes <- David2 %>%
-  select(pathway=Term, Genes) %>%
-  separate_rows(Genes, sep = ",") %>%
-  rename(Gene = Genes)
-head(David2_genes)
-
-David3 <-filtered_results[ filtered_results$Term=="GO:0008284~positive regulation of cell population proliferation"  ,]
-head(David1)
-# Select only the pathway and genes
-David3_genes <- David3 %>%
-  select(pathway=Term, Genes) %>%
-  separate_rows(Genes, sep = ",") %>%
-  rename(Gene = Genes)
-head(David3_genes)
-
-David4 <-filtered_results[ filtered_results$Term=="GO:0050678~regulation of epithelial cell proliferation"  ,]
-head(David1)
-#Select only the pathway and genes
-David4_genes <- David4 %>%
-  select(pathway=Term, Genes) %>%
-  separate_rows(Genes, sep = ",") %>%
-  rename(Gene = Genes)
-head(David4_genes)
-
-David5 <-filtered_results[ filtered_results$Term=="GO:0045595~regulation of cell differentiation"  ,]
-head(David1)
-#Select only the pathway and genes
-David5_genes <- David5 %>%
-  select(pathway=Term, Genes) %>%
-  separate_rows(Genes, sep = ",") %>%
-  rename(Gene = Genes)
-head(David5_genes)
-
-c_LSCSvsTA <- read_excel("c_clusterStemVsTA_wil.xlsx", sheet =1, col_names = TRUE)
-David_overlap <- inner_join(David5_genes,c_LSCSvsTA, by="Gene")
-David_overlap 
+#overlap genes between David1-5
+    David_overlap_gene <- David1_genes%>% inner_join( David2_genes, by="Gene")%>%
+      inner_join(David3_genes, by="Gene" )%>%inner_join(David4_genes, by="Gene" )%>%inner_join(David5_genes, by="Gene" )
+    print(David_overlap_gene)
+    write.xlsx(David_overlap_gene, "overlap_gene_David1&2&3&4&5.xlsx")
+    #overlap genes total by David1&2:  60 
+    #overlap genes total by David1,2,3,4,5: 8
+    
+    
+#search the genes expression 
+    c_LSCSvsTA_filter <- read_excel("c_clusterStemVsTA_wil_filter.xlsx", sheet =1, col_names = TRUE)
+    David_overlap <- inner_join(David1_genes,c_LSCSvsTA_filter, by="Gene")
+    head(David_overlap )
+    print(David_overlap )
 
 #=================================================================================
 # to generate a Cytoscape regulatory network from DAVID Pathway Results  
