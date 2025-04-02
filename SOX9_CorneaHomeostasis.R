@@ -975,20 +975,23 @@ data(motifAnnotations_mgi)
 scenicOptions <- SCENIC::initializeScenic(org = "mgi", dbDir = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/SCENIC_databases/", nCores = 10)
 library(Matrix)
 # Update SCENIC and dependencies
-install.packages("BiocManager")
-BiocManager::install("SCENIC", force = TRUE)
-BiocManager::install("RcisTarget")
+#install.packages("BiocManager")
+#BiocManager::install("SCENIC", force = TRUE)
+#BiocManager::install("RcisTarget")
+saveRDS(weightMat, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_weightMat.rds")
 
-weightMat <- as(weightMat, "CsparseMatrix")  # Convert to sparse matrix
-exprMat_filtered <- as(exprMat_filtered, "CsparseMatrix")  # Convert to sparse matrix
-class(weightMat)  # Should return "dgCMatrix"
-class(exprMat_filtered)  # Should return "dgCMatrix"
+#weightMat <- as(weightMat, "CsparseMatrix")  # Convert to sparse matrix
+#exprMat_filtered <- as(exprMat_filtered, "CsparseMatrix")  # Convert to sparse matrix
+#class(weightMat)  # Should return "dgCMatrix"
+#class(exprMat_filtered)  # Should return "dgCMatrix"
 
 #the code doesn't works
 #issue with codes origin?
+#regulons <- SCENIC::runSCENIC_1_coexNetwork2modules(weightMat, exprMat_filtered)
+
+weightMat <- as(weightMat, "dgCMatrix")
+exprMat_filtered <- as(exprMat_filtered, "dgCMatrix")
 regulons <- SCENIC::runSCENIC_1_coexNetwork2modules(weightMat, exprMat_filtered)
-
-
 
 
 
