@@ -308,19 +308,21 @@ Idents(sc_subset_c) <- "seurat_clusters"
 c_markers_roc <- FindAllMarkers(sc_subset_c, test.use="roc", min.pct = 0.25, only.pos = TRUE, logfc.threshold = 0.25) #only.pos = TRUE,
 
 #filter by p_val_adj
-markers_c_filter <- markers_c %>%
-  filter(p_val_adj < 0.05)
+#markers_c_filter <- markers_c %>% filter(p_val_adj < 0.05)
+
+#filter by roc>0.7
+#c_markers_roc_filter <- c_markers_roc%>% filter(myAUC >0.7)
+
 
 #write.csv(markers_c, file = "markers_c2025.csv")
-write.xlsx(markers_c,"markers_c2025.xlsx", rowNames=F)
+#write.xlsx(markers_c,"markers_c2025.xlsx", rowNames=F)
 write.xlsx(c_markers_roc,"c_markers_roc.xlsx", rowNames=F)
-markers_c <- read_excel("markers_c2025.xlsx")
-c_12 <- markers_c$cluster 
-
+#markers_c <- read_excel("markers_c2025.xlsx")
+#c_12 <- markers_c$cluster 
 
 # getting top 10 genes for all clusters
 library(dplyr)
-top10 <- markers_c %>% group_by(cluster) %>% top_n(n=10, wt=avg_log2FC)
+#top10 <- markers_c %>% group_by(cluster) %>% top_n(n=10, wt=avg_log2FC)
 top_roc <- c_markers_roc %>% group_by(cluster) %>% top_n(n=10, wt=myAUC)
 
 top_roc_c12 <- c_markers_roc %>%
@@ -370,12 +372,78 @@ write.xlsx(df, file = "c_avg_exp.xlsx", rowNames = TRUE)
 #Statistical power : A measure of the statistical power of the test for each gene. 
 #Receiver Operating Characteristic (ROC) Test (`test.use = “roc”)
 ##########################################################################
-Idents(sc_subset_c) <- "seurat_clusters" 
-#run stats with Wilcox and ROC
+
+############################################################################################################     
+#Finally chosen genes using dotplot
+# Define the list of features for DotPlot, with the renamed "EGFP-bGhpolyA" as "EGFP"
+features <- c('EGFP-bGhpolyA', 'Sox9',  'Cd63', 'Bmi1','Npdc1','Ctnnb1', 'Actn1','Krt15', 
+              'Mki67', 'Birc5', 'Cenpa', 'Krt12', 'Gjb3', 
+              'Muc4', 'Muc20', 'Krt13') #S1100a9
+# Create a custom mapping of feature names for visualization
+custom_labels <- setNames(c('EGFP', 'Sox9',  'Cd63', 'Bmi1','Npdc1','Ctnnb1', 'Actn1','Krt15', 'itgb1', 'intb4',
+                            'Mki67', 'Birc5', 'Cenpa', 'Krt12', 'Gjb3', 
+                            'Muc4', 'Muc20', 'Krt13'),
+                          features)
+# Generate the DotPlot with custom labels for "EGFP-bGhpolyA" as "EGFP"
+png(filename="c_dot_final.png", width = 500, height = 400)
+DotPlot(sc_subset_c, features = features) +
+  RotatedAxis() +
+  ggtitle("Final Cell Marker") +
+  scale_x_discrete(labels = custom_labels)+  # Apply the custom labels for visualization
+  scale_color_gradientn(colors = c("blue", "white", "red"))  # Red = high expression
+dev.off()
+
+############################################################################################################
+#rename the cluster in homestasis
+############################################################################################################
+
+features <- c('EGFP-bGhpolyA', 'Sox9', 'Cd63', 'Bmi1','Npdc1','Ctnnb1', 'Actn1','Krt15', 'Itgb1', 'Itgb4',
+              'Mki67', 'Birc5', 'Cenpa', 'Krt12', 'Gjb3', 'Krt13', 'Muc20')
+# Create a custom mapping of feature names for visualization
+custom_labels <- setNames(c('EGFP', 'Sox9',  'Cd63', 'Bmi1','Npdc1','Ctnnb1', 'Actn1','Krt15', 'Itgb1', 'Itgb4',
+                            'Mki67', 'Birc5', 'Cenpa', 'Krt12', 'Gjb3', 
+                            'Krt13', 'Muc20'),
+                          features)
+# Custom cluster labels for 13 clusters (0 to 12)
+custom_cluster_labels <- c(
+  '0' = 'BC',
+  '1' = 'TD',
+  '2' = 'TD',
+  '3' = 'TD',
+  '4' = 'UC',
+  '5' = 'TA',
+  '6' = 'BC',
+  '7' = 'TA',
+  '8' = 'Conj',
+  '9' = 'LSC',
+  '10' = 'BC',
+  '11' = 'PC',
+  '12' = 'LSC'
+)
+
+# Plot with custom x-axis labels (clusters)
+png(filename = "c_dot_final.png", width = 500, height = 400)
+DotPlot(sc_subset_c, features = features) +
+  RotatedAxis() +
+  ggtitle("Gene Expression in Homeostasis") +
+  scale_x_discrete(labels = custom_labels) +  # Change cluster labels on X
+  scale_y_discrete(labels = custom_cluster_labels) +  # Change cluster labels on y
+  scale_color_gradientn(colors = c("blue", "white", "red"))  # Expression gradient
+dev.off()
+############################################################################################################
+
+
+
+
+
+
 
 ###################################################################################################
 # find the DEG markers of LSCs-EGFP vs TA
 ###################################################################################################
+Idents(sc_subset_c) <- "seurat_clusters" 
+#run stats with Wilcox and ROC
+
 stem_cluster <- 12  # replace with the actual stem cell cluster ID
 TA_cluster <-  c(5,7) # replace with TA cluster IDs
 Idents(sc_subset_c) <- "seurat_clusters" 
