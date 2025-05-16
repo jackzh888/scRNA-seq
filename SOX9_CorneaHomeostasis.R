@@ -223,7 +223,7 @@ cluster_percent_c
 sc_subset_c <- RunUMAP(sc_subset_c, dims = pca.dims1)
 
 png(filename="c_umap2025.png")
-DimPlot(sc_subset_c, reduction = "umap", label=TRUE, label.size = 5)
+DimPlot(sc_subset_c, reduction = "umap", label=TRUE, label.size = 10)
 dev.off()  # Close the device to save the file
 ######################################################################################################################################################################################
 
@@ -304,8 +304,42 @@ sum(counts_c["Trpm8",]>0)
 
 ###########################################################################################
 #Differential expression with respect to clusters
-markers_c <- FindAllMarkers(sc_subset_c, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
-write.csv(markers_c, file = "markers_c2025.csv")
+Idents(sc_subset_c) <- "seurat_clusters" 
+c_markers_roc <- FindAllMarkers(sc_subset_c, test.use="roc", min.pct = 0.25, only.pos = TRUE, logfc.threshold = 0.25) #only.pos = TRUE,
+
+#filter by p_val_adj
+markers_c_filter <- markers_c %>%
+  filter(p_val_adj < 0.05)
+
+#write.csv(markers_c, file = "markers_c2025.csv")
+write.xlsx(markers_c,"markers_c2025.xlsx", rowNames=F)
+write.xlsx(c_markers_roc,"c_markers_roc.xlsx", rowNames=F)
+markers_c <- read_excel("markers_c2025.xlsx")
+c_12 <- markers_c$cluster 
+
+
+# getting top 10 genes for all clusters
+library(dplyr)
+top10 <- markers_c %>% group_by(cluster) %>% top_n(n=10, wt=avg_log2FC)
+top_roc <- c_markers_roc %>% group_by(cluster) %>% top_n(n=10, wt=myAUC)
+
+top_roc_c12 <- c_markers_roc %>%
+  filter(cluster == 12) %>%   # First, filter only cluster 12
+  top_n(n = 100, wt = myAUC)   # Then select the top 100 based on myAUC
+write.xlsx(top_roc_c12,"top_roc_c12.xlsx", rowNames=F)
+
+#Heatmap of top genes for all clusters
+
+library(Seurat)
+library(ggplot2)
+
+png(filename = "top_wil_clusters_heatmap_c.png", width = 1200, height = 1000)
+DoHeatmap(sc_subset_c, features = top10$gene) +
+  ggtitle("Corneal Homeostasis Top Genes") +
+  scale_fill_gradientn(colors = c("blue", "white", "red"))  # Blue to red scale
+
+dev.off()
+
 
 ##########################################################################################
 #the average gene expression in each clusters
@@ -366,6 +400,17 @@ head(df)
 df <- df %>% rownames_to_column(var = "Gene") # Move row names into a new column
 #df <- df[, -1]
 write.xlsx(df, file = "c_clusterStemVsTA_wil_filter.xlsx", rowNames = TRUE) 
+c_clusterStemVsTA_wil_filter <- read_excel("c_clusterStemVsTA_wil_filter.xlsx", col_names = TRUE)
+#only the up regulated gene
+head(c_clusterStemVsTA_wil_filter)
+c_clusterStemVsTA_wil_filter_up <- filter (c_clusterStemVsTA_wil_filter, avg_log2FC>0)%>%
+  arrange(avg_log2FC)
+write.xlsx(c_clusterStemVsTA_wil_filter_up, "c_clusterStemVsTA_wil_filter_up.xlsx", rownames=TRUE)
+
+
+
+
+
 
 #Roc
 c_clusterStemVsTA_roc<- FindMarkers(sc_subset_c, ident.1 = stem_cluster , ident.2 = TA_cluster , test.use="roc",
@@ -380,24 +425,28 @@ c_clusterStemVsTA_roc_filter <- filter (c_clusterStemVsTA_roc, myAUC>0.7)%>%
 head(c_clusterStemVsTA_roc_filter) 
 write.xlsx(c_clusterStemVsTA_roc_filter, file="c_clusterStemVsTA_roc_filter.xlsx", rownames=T)
 
-#Overlap Wilcon and Roc
-c_clusterStemVsTA_overlap_filter <- inner_join(c_clusterStemVsTA_wil_filter, c_clusterStemVsTA_roc_filter, by )
 
 #adding the column name with 'Gene', then read the file 
-c_clusterStemVsTA_wil <- read_excel("c_clusterStemVsTA_wil.xlsx",  col_names = TRUE)
-c_clusterStemVsTA_roc <- read_excel("c_clusterStemVsTA_roc.xlsx",  col_names = TRUE)
+c_clusterStemVsTA_wil_filter <- read_excel("c_clusterStemVsTA_wil_filter.xlsx",  col_names = TRUE)
+c_clusterStemVsTA_roc_filter <- read_excel("c_clusterStemVsTA_roc_filter.xlsx",  col_names = TRUE)
 avg_exp <- read_excel("c_avg_exp.xlsx",  col_names = TRUE)
 
  
 
 #inner_join the two statistics test results from wilcoxin and roc 
-c_cluster12vsTA_wil_roc_join <- inner_join(c_clusterStemVsTA_wil, c_clusterStemVsTA_roc, by="Gene")
+c_cluster12vsTA_wil_roc_join_filter <- inner_join(c_clusterStemVsTA_wil_filter, c_clusterStemVsTA_roc_filter, by="Gene")
+write.xlsx(c_cluster12vsTA_wil_roc_join_filter, file="c_cluster12vsTA_wil_roc_join_filter.xlsx", rownames=T)
+c_cluster12vsTA_wil_roc_join_filter <- read_excel("c_cluster12vsTA_wil_roc_join_filter.xlsx", col_names = TRUE)
+
 
 #inner_join the two statistics test results with the original average expression data
 c_cluster12vsTA_wil_roc_Aveexp <- avg_exp  %>%
   inner_join(c_clusterStemVsTA_wil, by = "Gene")%>%
   inner_join(c_clusterStemVsTA_roc, by = "Gene") 
 write.xlsx(c_cluster12vsTA_wil_roc_Aveexp, "c_cluster12vsTA_wil_roc_Aveexp.xlsx", rowNames=F)
+c_cluster12vsTA_wil_roc_Aveexp <- read_excel("c_cluster12vsTA_wil_roc_Aveexp.xlsx", col_names = TRUE)
+
+
 
 #==================================================
 ### pathway 
@@ -432,14 +481,14 @@ s.genes <- s.genes[s.genes %in% rownames(sc_subset_c)]
 g2m.genes <- g2m.genes[g2m.genes %in% rownames(sc_subset_c)]
 
 #Assign Cell-Cycle Scores
-sc_subset_c <- CellCycleScoring(sc_subset_c, s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
+sc_subset_cycle_c <- CellCycleScoring(sc_subset_c, s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
 # Running a PCA on cell cycle genes reveals, unsurprisingly, that cells separate entirely by
 # phase
-sc_subset_c <- RunPCA(sc_subset_c, features = c(s.genes, g2m.genes))
+sc_subset_cycle_c <- RunPCA(sc_subset_cycle_c, features = c(s.genes, g2m.genes))
 
 # Create the table for cell cycle phases across seurat clusters
-cycle_table_c <- table(sc_subset_c@meta.data$Phase,sc_subset_c@meta.data$seurat_clusters )
-write.csv(cycle_table_c, file="c_cycle_table2025.csv", row.names = TRUE)
+cycle_table_c <- table(sc_subset_cycle_c@meta.data$Phase,sc_subset_cycle_c@meta.data$seurat_clusters )
+write.csv(cycle_table_cycle_c, file="c_cycle_table2025.csv", row.names = TRUE)
 
 # Convert the table to a data frame for easier manipulation
 cycle_table_c_df <- as.data.frame.matrix(cycle_table_c)
@@ -461,20 +510,27 @@ cluster_annotation <- data.frame(
 )
 rownames(cluster_annotation) <- colnames(cycle_percentage_c) # Set rownames to match heatmap column names
 
+
+# Create the annotation dataframe
+cluster_annotation <- data.frame(Cluster = factor(cluster_labels))
+rownames(cluster_annotation) <- colnames(cycle_percentage_c)
+rownames(cycle_percentage_c)[rownames(cycle_percentage_c) == "G1"] <- "G1/G0"
 # Generate the heatmap
-png(filename ="cycle_percentage_c_heatmap.png" )
+png(filename ="cycle_percentage_c_heatmap.png", width = 500, height = 400 )
 cycle_percentage_c_heatmap <- pheatmap(
   mat = cycle_percentage_c,                # Data matrix
   color = colorRampPalette(c("blue", "white", "red"))(100), # Gradient from blue (low) to red (high)
   cluster_rows = FALSE,                    # Disable clustering for rows (phases)
   cluster_cols = FALSE,                    # Disable clustering for columns (clusters)
-  display_numbers = TRUE,                  # Show the percentage values on the heatmap
+  display_numbers = FALSE,                  # Show the percentage values on the heatmap
   fontsize_number = 10,                    # Font size for displayed numbers
   main = "Cell Cycle Phases Across Clusters", # Title of the heatmap
   fontsize_row = 12,                       # Font size for row labels
   fontsize_col = 12,                        # Font size for column labels
   annotation_col = cluster_annotation,      # Add the cluster annotation to the x-axis
-  angle_col = 45                           # Rotate cluster numbers by 45 degrees
+  angle_col = 45,                           # Rotate cluster numbers by 45 degrees
+  cellwidth = 30,   # Width of each heatmap box (increase for bigger "spot")
+  cellheight = 25   # Height of each heatmap box
 )
 dev.off()
 
@@ -679,7 +735,7 @@ head(t(monocle_c@reducedDimS))
 library(dplyr)
 library(readr)
 # Read the DEG file
-deg_data <- read_excel("c_clusterStemVsTA_wil.xlsx",  col_names = TRUE)
+deg_data <- read_excel("c_clusterStemVsTA_wil_filter.xlsx",  col_names = TRUE)
 # View the first few rows
 head(deg_data)
 
@@ -760,16 +816,18 @@ head(fgsea_results)
 fgsea_results$leadingEdge <- sapply(fgsea_results$leadingEdge, function(x) paste(x, collapse = ";"))
 head(fgsea_results)
 
-# Save results # change the name based on GO or Hallmark.
-write.xlsx(fgsea_results, "c_GSEA_Hallmark_results.xlsx")
-#write.xlsx(fgsea_results, "c_GSEA_StemCell_results.xlsx")
-#write.csv(fgsea_results, "c_GSEA_StemCell_results.csv", row.names = FALSE)
-
-
 #select GSEA
 significant_pathways <- fgsea_results %>%
   filter(padj < 0.05) %>%
   arrange(padj)  # Sort by significance
+
+
+# Save results # change the name based on GO or Hallmark.
+write.xlsx(significant_pathways, "c_GSEA_GO_results.xlsx")
+write.xlsx(significant_pathways, "c_GSEA_Hallmark_results.xlsx")
+#write.xlsx(fgsea_results, "c_GSEA_StemCell_results.xlsx")
+#write.csv(fgsea_results, "c_GSEA_StemCell_results.csv", row.names = FALSE)
+
 
 top_upregulated <- significant_pathways %>%
   filter(NES > 0) %>%
@@ -844,6 +902,18 @@ write.xlsx(GSEA_overlap, "c_LSCSvsTA_wil_filter_overlapGSEA_HALLMARK_IL2_STAT5_S
 
 setwd("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/GSEA")  
 write.xlsx(GSEA_overlap, "c_GSEA_LSCSvsTA_HALLMARK_G2M_CHECKPOINT.xlsx")
+
+c_LSCS_KRAS_SIGNALING_UP <- read_excel("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/GSEA/c_LSCSvsTA_wil_filter_overlapGSEA_HALLMARK_KRAS_SIGNALING_UP.xlsx", sheet =1, col_names = TRUE)
+c_LSCS_IL2_STAT5_SIGNALING <- read_excel("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/GSEA/c_LSCSvsTA_wil_filter_overlapGSEA_HALLMARK_IL2_STAT5_SIGNALING.xlsx", sheet =1, col_names = TRUE)
+c_LSCS_G2M_CHECKPOINT <- read_excel("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/GSEA/c_LSCSvsTA_wil_filter_overlapGSEA_HALLMARK_G2M_CHECKPOINT.xlsx", sheet =1, col_names = TRUE)
+
+c_LSCS_Msigdb <- c_LSCS_IL2_STAT5_SIGNALING  %>%
+  inner_join(c_LSCS_G2M_CHECKPOINT, by = "Gene")
+  #inner_join(c_LSCS_G2M_CHECKPOINT, by = "Gene") 
+    #c_LSCS_KRAS_SIGNALING_UP #c_LSCS_IL2_STAT5_SIGNALING #c_LSCS_G2M_CHECKPOINT
+#c_LSCS_KRAS_SIGNALING_UP n c_LSCS_IL2_STAT5_SIGNALING Gene: Car2, Rabgap1l
+print(c_LSCS_Msigdb$Gene)
+print(c_LSCS_G2M_CHECKPOINT$Gene)
 
 #==================================================
 ### SCENIC 
