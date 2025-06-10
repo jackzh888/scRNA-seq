@@ -1,0 +1,882 @@
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+library(Matrix)
+library(tibble)
+library(openxlsx)
+setwd("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ")
+sc_subset_wh <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/wh_sc_subset_join.rds")
+###########################################################################################
+#save the object at this point
+
+saveRDS(sc_subset_wh_join, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/SOX9scRNAseq_QZ_3wh_join.rds")
+saveRDS(cluster12_wh.markers, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/cluster12_wh.markers.rds")
+saveRDS(cluster_counts_wh_E, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/cluster_counts_wh_E.rds")
+saveRDS(cluster_counts_wh, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/cluster_counts_wh.rds")
+saveRDS(cluster_counts_long, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/cluster_counts_long.rds")
+saveRDS(sc_subset_wh_join1, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/SOX9scRNAseq_QZ_3wh_join1.rds")
+saveRDS(sc_subset_wh_join2, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/SOX9scRNAseq_QZ_3wh_join2.rds")
+#save diff EP markers in clusters
+saveRDS(markers_wh, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/markers_wh.rds")
+saveRDS(roc_stats_wh, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/roc_stats_wh.rds")
+
+sc_subset_wh_join <- readRDS("sc_subset_wh_join.rds")
+sc_subset_wh <- readRDS("SOX9scRNAseq_QZ_3wh.rds")
+
+roc_stats_wh <-  readRDS("roc_stats_wh.rds")
+###########################################################################################
+#access to data
+path3 <- "/Users/jackzhou/Desktop/Project_Sox9/Row data_CellRanger/WH1/filtered_feature_bc_matrix"
+path4 <- "/Users/jackzhou/Desktop/Project_Sox9/Row data_CellRanger/WH2/filtered_feature_bc_matrix"
+data3 <- Read10X(data.dir = path3)
+data4 <- Read10X(data.dir = path4)
+seurat3 <- CreateSeuratObject(counts = data3, project = "Sample3")
+seurat4 <- CreateSeuratObject(counts = data4, project = "Sample4")
+
+#merge 2 datasets
+seurat_wh <- merge(seurat3, y = seurat4, project = "MergedDataset", add.cell.ids=c("s3","s4"))
+seurat_wh
+head(seurat_wh$orig.ident)
+# count how many cells are in each sample using table()
+table(seurat_wh$orig.ident)
+
+
+###################################################################################
+# make a list of the mitochondrial genes
+gene_names_wh<- rownames(seurat_wh)
+mt_genes_wh <- grep("^mt-", gene_names_wh, value = TRUE)
+length(mt_genes_wh)
+head(mt_genes_wh)
+
+###########################################################################################
+#QC and selecting cells for further analysis
+# calculate mt percentage
+seurat_wh[["percent.MT"]] <- PercentageFeatureSet(seurat_wh, pattern = "^mt-")
+#Review mc%
+summary(seurat_wh[["percent.MT"]])
+
+# make plots of the distribution of counts, genes, and mitochondrial expression
+png(filename = 'wh_plot_mt.png')
+plot_mt <- VlnPlot(seurat_wh, features = c("nFeature_RNA","nCount_RNA","percent.MT"),pt.size=0.2)
+plot_mt
+dev.off()
+
+# make scatterplots of one value vs the other
+# number of UMI counts vs number of genes
+png(filename = 'wh_plot1.png')
+plot1 <- FeatureScatter(seurat_wh, feature1="nCount_RNA",feature2="nFeature_RNA")
+plot1
+dev.off()  # Close the device to save the file
+# number of UMI counts vs % mitochondrial expression
+png(filename = 'wh_plot2.png')
+plot2 <- FeatureScatter(seurat_wh, feature1="nCount_RNA",feature2="percent.MT")
+plot2
+dev.off()  # Close the device to save the file
+# number of genes vs % mitochondrial expression
+png(filename = 'wh_plot3.png')
+plot3 <- FeatureScatter(seurat_wh, feature1="nFeature_RNA",feature2="percent.MT")
+plot3
+dev.off()  # Close the device to save the file
+plot1+plot2+plot3
+
+#save
+saveRDS(seurat_wh, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/wh_seurat.rds")
+
+# Filter cells for downstream analysis
+sc_subset_wh <- subset(seurat_wh, subset = nFeature_RNA > 2000  & nCount_RNA>8000 & percent.MT < 4)
+
+# check what fraction of cells we kept from each sample, using the table function
+orig.counts <- table(seurat_wh$orig.ident)
+subset.counts <- table(sc_subset_wh$orig.ident)
+cell_stats <- cbind(orig.counts, subset.counts, subset.counts/orig.counts)
+colnames(cell_stats) <- c("Starting Cells","Retained Cells","Fraction")
+cell_stats
+
+#save
+saveRDS(sc_subset_wh, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/wh_sc_subset_filted.rds")
+#sc_subset_wh <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/wh_sc_subset_filted.rds")
+###########################################################################################
+# 1.4 Gene feature selection and scaling
+# normalization
+sc_subset_wh <- NormalizeData(sc_subset_wh)
+
+#save
+saveRDS(sc_subset_wh, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/sc_subset_Normalized_wh.rds")
+#sc_subset_wh <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/sc_subset_Normalized_wh.rds")
+###########################################################################################
+# Find variable genes.based on the plot, choose the top 10000.
+sc_subset_wh <- FindVariableFeatures(sc_subset_wh,nfeatures=10000)
+VariableFeaturePlot(sc_subset_wh)
+top10 <- head(VariableFeatures(sc_subset_wh), 10)
+top10
+
+#save
+saveRDS(sc_subset_wh, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/wh_sc_subset_selected.rds")
+#sc_subset_wh <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/wh_sc_subset_selected.rds")
+###########################################################################################
+# Scaling the data by z-score
+all.genes_wh <- rownames(sc_subset_wh)
+sc_subset_wh <- ScaleData(sc_subset_wh)
+
+###########################################################################################
+#Perform linear dimensional reduction
+#Centering and scaling data matrix;#npcs = 50 mean PCA will return the top 50 principal components (PCs)
+sc_subset_wh <- RunPCA(sc_subset_wh,features=VariableFeatures(object=sc_subset_wh),
+                          npcs = 50,verbose=F)
+# plots
+ElbowPlot(sc_subset_wh,ndims=24)
+#in this example, we might have been justified in choosing anything between PC 17-21 as a cutoff.
+png(filename = "pca_wh.png")
+DimHeatmap(sc_subset_wh,dims=1:24,cells=300,balanced=T)
+dev.off
+#save
+saveRDS(sc_subset_wh, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/wh_sc_subset_PCA.rds")
+sc_subset_wh <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/wh_sc_subset_PCA.rds")
+###########################################################################################
+# Cluster the cells
+# Run clustering on the top PCs to filter out noise
+#we first construct a KNN graph based on the euclidean distance in PCA space, 
+#takes as input the previously defined dimensionality of the dataset (first 17 PCs).
+pca.dims2 = 1:17
+sc_subset_wh <- FindNeighbors(sc_subset_wh, dims=pca.dims2)
+
+##########################################################################
+#Data Integration and/or Batch-effect correction
+##########################################################################
+#install.packages("harmony")  
+library(harmony)
+# Add sample/batch identity from original Seurat objects
+sc_subset_wh$batch <- ifelse(grepl("^s3_", colnames(sc_subset_wh)), "Sample3", "Sample4")
+# Run Harmony using 'batch' as the grouping variable
+sc_subset_wh <- RunHarmony(sc_subset_wh, group.by.vars = "batch", dims.use = 1:50, max.iter.harmony = 100)
+
+
+sc_subset_wh <- FindNeighbors(sc_subset_wh, reduction = "harmony", dims = pca.dims2)
+sc_subset_wh <- RunUMAP(sc_subset_wh, reduction = "harmony", dims = pca.dims2)
+#Optional QC visualization
+DimPlot(sc_subset_wh, group.by = "batch", reduction = "umap") + ggtitle("Harmony-corrected UMAP")
+
+#we next apply modularity optimization techniques 
+# run clutering, with resolution 
+#sets the ‘granularity’ of the downstream clustering, 
+  #with increased values leading to a greater number of clusters. 
+  #We find that setting this parameter between 0.4-1.2 
+        #typically returns good results for single-cell datasets of around 3K cells.
+sc_subset_wh <- FindClusters(sc_subset_wh, resolution=0.6, algorithm = 2)
+# Look at cluster IDs of the first 5 cells
+head(Idents(sc_subset_wh ), 2)
+
+###########################################################################################
+#Run non-linear dimensional reduction (UMAP/tSNE)
+# tSNE plot
+  sc_subset_wh <- RunTSNE(sc_subset_wh, dims=pca.dims2)
+  png(filename="wh_tSNE.png")
+  DimPlot(sc_subset_wh, reduction='tsne', label=T)
+  dev.off()  # Close the device to save the file
+  # we can also make the tSNE plot with respect to the orignal identity
+  png(filename="wh_tSNE_groups.png")
+  DimPlot(sc_subset_wh, reduction='tsne', group.by="orig.ident")
+  dev.off()  # Close the device to save the file
+  # size of clusters
+  table(sc_subset_wh$seurat_clusters)
+  # number of samples in each cluster
+  cluster_sample_wh <- data.frame(cluster=sc_subset_wh$seurat_clusters,
+                                  group=sc_subset_wh$orig.ident)
+  cluster_abundance_wh <- table(cluster_sample_wh)
+  cluster_abundance_wh
+  # see counts as percent of total
+  cluster_percent_wh <- t(t(cluster_abundance_wh)/colSums(cluster_abundance_wh))
+  cluster_percent_wh
+
+# UMAP plot
+#sc_subset_wh <- RunUMAP(sc_subset_wh, dims = pca.dims2)
+png(filename="wh_umap.png")
+DimPlot(sc_subset_wh, reduction = "umap",label=TRUE, label.size = 10)
+dev.off()  # Close the device to save the file
+######################################################################################################################################################################################
+######################################################################################################################################################################################
+#save
+saveRDS(sc_subset_wh, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/wh_sc_subset_UMAP.rds")
+sc_subset_wh <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/wh_sc_subset_UMAP.rds")
+######################################################################################################################################################################################
+######################################################################################################################################################################################
+
+#cluster_ave_wh <- AverageExpression(sc_subset_wh, assays = 'RNA')
+#cluster_ave_wh <-AverageExpression(object = sc_subset_wh)$RNA
+#head(cluster_ave_wh)
+#write.xlsx(cluster_ave_wh, "wh_cluster_ave.xlsx", rowNames=F)
+
+###########################################################################################
+#Finding differentially expressed features (cluster biomarkers)
+#Differential expression with respect to clusters
+# Joining layers if they're not integrated
+#sc_subset_wh_join <- JoinLayers(sc_subset_wh, features = rownames(sc_subset_wh), assay = 'RNA') 
+sc_subset_wh<- JoinLayers(sc_subset_wh, features = rownames(sc_subset_wh), assay = 'RNA') 
+#save
+saveRDS(sc_subset_wh, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/wh_sc_subset_join_harmony.rds")
+sc_subset_wh <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/wh_sc_subset_join_harmony.rds")
+#################################################################################################################################################
+
+  
+############################################################################################################################################
+
+ 
+# check cells expressed with "EGFP-bGhpolyA"
+# Subset cells from a specific sample group,
+Idents(sc_subset_wh_join) = "orig.ident"
+sc_subset_wh_join1 <- subset(sc_subset_wh_join, subset = orig.ident == "Sample3")
+sc_subset_wh_join2 <- subset(sc_subset_wh_join, subset = orig.ident == "Sample4")
+
+counts_wh<-GetAssayData(object = sc_subset_wh_join,  assay = "RNA", slot = "counts")
+counts_wh1<-GetAssayData(object = sc_subset_wh_join1, assay = "RNA", slot = "counts")
+counts_wh2<-GetAssayData(object = sc_subset_wh_join2, assay = "RNA", slot = "counts")
+
+saveRDS(counts_wh, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/wh_counts.rds")
+#counts_wh <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/wh_counts.rds")
+
+
+# write cluster matrix and gene expression matrix 
+write.csv(object = sc_subset_wh_join@meta.data, file = "wh_cluster.csv", row.names = FALSE)
+#write.csv(counts_wh, file= "wh_counts.csv")
+#write.xlsx(counts_wh, "wh_counts.xlsx")
+
+sum(counts_wh["EGFP-bGhpolyA",]>0)
+sum(counts_wh1["EGFP-bGhpolyA",]>0)
+sum(counts_wh2["EGFP-bGhpolyA",]>0)
+
+#################Differential gene expression analysis(DEG) on selected cells#########################################################################
+###########Differential gene expression analysis(DEG) on EGFP-bGhpoly expressed cells############
+# Add expression information for "EGFP-bGhpolyA"
+sc_subset_wh$EGFP_bGhpolyA_expr <- GetAssayData(object = sc_subset_wh, assay = "RNA", slot = "counts")["EGFP-bGhpolyA", ] > 0
+
+# Set the new cluster identities based on EGFP-bGhpolyA expression
+Idents(sc_subset_wh) <- sc_subset_wh_join$EGFP_bGhpolyA_expr
+
+# Perform DEA between cells expressing "EGFP-bGhpolyA" and those that do not
+deg_results_wh <- FindMarkers(sc_subset_wh_join, ident.1 = TRUE, ident.2 = FALSE)
+
+# Save DEG results
+write.xlsx(deg_results_wh, "wh_DEG_EGFP_vs_Other.xlsx")
+
+
+# Count cells expressing "EGFP-bGhpolyA" and total cells per cluster
+cluster_counts_wh_E <- sc_subset_wh_join@meta.data %>%
+  group_by(seurat_clusters) %>%
+  summarise(
+    EGFP_bGhpolyA_count = sum(EGFP_bGhpolyA_expr),
+    total_count = n(),
+    EGFP_bGhpolyA_percentage = 100 * EGFP_bGhpolyA_count / total_count,
+    no_EGFP_bGhpolyA_percentage = 100 - EGFP_bGhpolyA_percentage  # Cells without EGFP-bGhpolyA expression
+  )
+# View the plot
+barplot(cluster_counts_wh_E$EGFP_bGhpolyA_percentage )
+barplot(cluster_counts_wh_E$EGFP_bGhpolyA_count )
+barplot(cluster_counts_wh_E$total_count )
+# View the result
+print(cluster_counts_wh_E)
+write.xlsx(cluster_counts_wh_E,  "wh_cluster_counts_EGFP1.xlsx")
+
+# Count cells expressing "EGFP-bGhpolyA", "orig.ident" and total cells per cluster
+cluster_counts_wh_E2 <- sc_subset_wh_join@meta.data %>%
+  group_by(seurat_clusters, orig.ident) %>%
+  summarise(
+    EGFP_bGhpolyA_count = sum(EGFP_bGhpolyA_expr),
+    total_count = n(),
+    EGFP_bGhpolyA_percentage = 100 * EGFP_bGhpolyA_count / total_count,
+    no_EGFP_bGhpolyA_percentage = 100 - EGFP_bGhpolyA_percentage  # Cells without EGFP-bGhpolyA expression
+  )
+# View the plot
+barplot(cluster_counts_wh_E2$EGFP_bGhpolyA_percentage )
+barplot(cluster_counts_wh_E2$EGFP_bGhpolyA_count )
+barplot(cluster_counts_wh_E2$total_count )
+
+write.xlsx(cluster_counts_wh_E2,  "wh_cluster_counts_EGFP2.xlsx")
+
+##########################################################################################
+#the average gene expression in each clusters
+##########################################################################################
+
+wh_avg_exp <- AverageExpression(sc_subset_wh) #AggregateExpression
+head(wh_avg_exp$RNA)  # Check the first few rows of the average expression matrix for RNA assay
+sc_subset_wh <- subset(sc_subset_wh, features = rownames(sc_subset_wh)[rowSums(GetAssayData(sc_subset_wh, slot = "counts")) > 0])
+wh_avg_exp <- AverageExpression(sc_subset_wh)
+head(wh_avg_exp$RNA)
+write.csv(wh_avg_exp, file = "wh_avg_exp.csv")
+
+
+
+#################################Manipulate clusters#############################################################################################################################
+#################Differential expression analysis(DEG) on selected cluster####################
+# if you wanted to test between one cluster vs the combination of two other clusters:
+##########################################################################
+#wilcox
+######################################################################
+######################################################################################################################################################################################
+#unique(sc_subset_wh_join@meta.data$seurat_clusters)
+#levels(Idents(sc_subset_wh_join))
+
+Idents(sc_subset_wh) <- "seurat_clusters" 
+#Differential expression with respect to clusters
+#wh_wilcox_stats <- FindAllMarkers(sc_subset_wh, test.use="wilcox",only.pos = TRUE,
+#                              min.pct = 0.25, logfc.threshold = 0.25)#only.pos = TRUE,
+wh_markers_roc <- FindAllMarkers(sc_subset_wh, test.use="roc", min.pct = 0.25, logfc.threshold = 0.25) #only.pos = TRUE,
+write.xlsx(wh_markers_roc ,"wh_roc.xlsx", rowNames=F)
+
+# getting top 10 genes for all clusters
+library(dplyr)
+#top10_wh <- wh_wilcox_stats %>% group_by(cluster) %>% top_n(n=10, wt=avg_log2FC)
+top10_roc_wh <- wh_markers_roc %>% group_by(cluster) %>% top_n(n=10, wt=myAUC)
+top10_roc_wh
+
+#Heatmap of top genes for all clusters
+#png(filename = "top_clusters_heatmap_wh.png")
+#DoHeatmap(sc_subset_wh, features=top10_roc_wh$gene)+ggtitle("Corneal Wound Healing Top Genes")
+#dev.off()
+
+#png(filename = "top_clusters_heatmap_roc_wh.png")
+#DoHeatmap(sc_subset_c, features=top10_roc_wh$gene)+ggtitle("Corneal Wound Healing Top Genes")
+#dev.off()
+
+  library(Seurat)
+  library(ggplot2)
+  
+  png(filename = "top_roc_clusters_heatmap_wh.png", width = 1200, height = 1000)
+  DoHeatmap(sc_subset_wh, features = top10_roc_wh$gene) +
+    ggtitle("Corneal Wound Healing Top Genes") +
+    scale_fill_gradientn(colors = c("blue", "white", "red"))  # Blue to red scale
+  
+  dev.off()
+
+
+#min.pct = 0.25: This specifies the minimum percentage of cells in a cluster 
+#that must express the gene in order for it to be considered a marker.
+#logfit.threshold =0.25 : roughly equivalent to 1.2-fold change
+#  in expression between the cluster and other clusters to be identified as differentially expressed.
+
+  ############################################
+# find all markers of cluster 12
+cluster12_markers_wh1 <- FindMarkers(sc_subset_wh, ident.1 = 12, test.use="wilcox",
+                                    min.pct = 0.25, logfc.threshold = 0.25 )#only.pos = TRUE, 
+  cluster12_markers_wh1 <- filter (cluster12_markers_wh1, p_val_adj<0.05)%>%
+write.xlsx(cluster12_markers_wh1, file = "wh_cluster12_markers_wil.xlsx", rowNames=T)
+cluster12_markers_wh1 <- read_excel("wh_cluster12_markers_wil.xlsx",  col_names = TRUE)
+# find all markers of cluster 12
+cluster12_markers_wh2 <- FindMarkers(sc_subset_wh, ident.1 = 12, test.use="roc",
+                                     min.pct = 0.25, logfc.threshold = 0.25 )#only.pos = TRUE,
+write.xlsx(cluster12_markers_wh2, file = "wh_cluster12_markers_roc.xlsx", rowNames=T)
+cluster12_markers_wh2 <- read_excel("wh_cluster12_markers_roc.xlsx",  col_names = TRUE)
+#innerjoin genes of cluster 12
+wh_cluster12_wil_roc_join <- inner_join(cluster12_markers_wh1, cluster12_markers_wh2, by="Gene")
+write.xlsx(wh_cluster12_wil_roc_join , file = "wh_cluster12_wil_roc_join.xlsx",  rowNames=T)
+
+
+
+#LSCS-egfp vs TA
+wh_cluster12vsTA_wilcox<- FindMarkers(sc_subset_wh, ident.1 = 12, ident.2 = c( 2, 4), test.use="wilcox",
+                                    min.pct = 0.25, logfc.threshold = 0.25)#only.pos = TRUE, 
+head(wh_cluster12vsTA_wilcox)
+write.xlsx(wh_cluster12vsTA_wilcox, file = "wh_cluster12vsTA_wilcox.xlsx", rowNames=T)
+wh_cluster12vsTA_wilcox <- read_excel("wh_cluster12vsTA_wilcox.xlsx",  col_names = TRUE)
+
+#filter by p_val_adj<0.05
+head(wh_cluster12vsTA_wilcox)
+wh_cluster12vsTA_wilcox_filter <- filter (wh_cluster12vsTA_wilcox, p_val_adj<0.05)%>%
+  arrange(avg_log2FC)
+write.xlsx(wh_cluster12vsTA_wilcox_filter, file = "wh_cluster12vsTA_wilcox_filter.xlsx",  rowNames=T)
+head(wh_cluster12vsTA_wilcox_filter)
+wh_cluster12vsTA_wilcox_filter <- read_excel("wh_cluster12vsTA_wilcox_filter.xlsx",  col_names = TRUE)
+
+
+#only the up regulated gene
+wh_cluster12vsTA_wilcox_filter_up <- filter (wh_cluster12vsTA_wilcox_filter, avg_log2FC>0)%>%
+  arrange(avg_log2FC)
+write.xlsx(wh_cluster12vsTA_wilcox_filter_up, "wh_cluster12vsTA_wilcox_filter_up.xlsx", rownames=TRUE)
+
+
+#filter by auc
+wh_cluster12vsTA_roc<- FindMarkers(sc_subset_wh, ident.1 = 12, ident.2 = c( 2, 4), test.use="roc",
+                                min.pct = 0.25, logfc.threshold = 0.25) #only.pos = TRUE,
+head(wh_cluster12vsTA_roc)
+write.xlsx(wh_cluster12vsTA_roc, file = "wh_cluster12vsTA_roc.xlsx",  rowNames=T)
+wh_cluster12vsTA_roc <- read_excel("wh_cluster12vsTA_roc.xlsx",  col_names = TRUE)
+
+wh_cluster12vsTA_wil_roc_join <- inner_join(wh_cluster12vsTA_wilcox_filter, wh_cluster12vsTA_roc, by="Gene")
+write.xlsx(wh_cluster12vsTA_wil_roc_join, file = "wh_cluster12vsTA_wil_roc_join.xlsx",  rowNames=T)
+wh_cluster12vsTA_wil_roc_join <- read_excel("wh_cluster12vsTA_wil_roc_join.xlsx", col_names = TRUE)
+
+#Filter DEG by p_adj<0.5 and auc>0.7
+
+
+wh_clusterStemVsTA_wil_roc_filter <- filter (wh_clusterStemVsTA_wil_filter, myAUC>0.7)%>%
+  arrange(avg_log2FC.x)
+head(wh_clusterStemVsTA_wil_roc_filter) 
+
+  wh_clusterStemVsTA_wil_roc_filter_cleaned <- wh_clusterStemVsTA_wil_roc_filter %>%
+  select(-avg_log2FC.x, -pct.1.x, -pct.2.x) %>%  # Remove unwanted columns
+  rename(
+    avg_log2FC = avg_log2FC.y,
+    pct.1 = pct.1.y,
+    pct.2 = pct.2.y
+  )
+head(wh_clusterStemVsTA_wil_roc_filter_cleaned)
+write.xlsx(wh_clusterStemVsTA_wil_roc_filter_cleaned, file = "wh_clusterStemVsTA_wil_roc_filter.xlsx",  rowNames=T)
+
+
+############################################################################################################
+#rename the cluster in wound healing
+############################################################################################################
+
+features <- c('EGFP-bGhpolyA', 'Sox9', 'Cd63', 'Bmi1','Npdc1','Ctnnb1', 'Actn1','Krt15', 'Itgb1', 'Itgb4',
+              'Mki67', 'Birc5', 'Cenpa', 'Krt12', 'Gjb3', 'Krt13', 'Muc20')
+# Create a custom mapping of feature names for visualization
+custom_labels <- setNames(c('EGFP', 'Sox9',  'Cd63', 'Bmi1','Npdc1','Ctnnb1', 'Actn1','Krt15', 'Itgb1', 'Itgb4',
+                            'Mki67', 'Birc5', 'Cenpa', 'Krt12', 'Gjb3', 
+                            'Krt13', 'Muc20'),
+                          features)
+# Custom cluster labels for 13 clusters (0 to 12)
+custom_cluster_labels <- c(
+  '0' = 'BC',
+  '1' = 'TA',
+  '2' = 'TA',
+  '3' = 'TD',
+  '4' = 'TA',
+  '5' = 'TD',
+  '6' = 'UC',
+  '7' = 'Conj',
+  '8' = 'BC',
+  '9' = 'UC',
+  '10' = 'PC',
+  '11' = 'LSC',
+  '12' = 'LSC'
+)
+
+# Plot with custom x-axis labels (clusters)
+png(filename = "wh_dot_final.png", width = 500, height = 400)
+DotPlot(sc_subset_wh, features = features) +
+  RotatedAxis() +
+  ggtitle("Gene Expression in Wound Healing") +
+  scale_x_discrete(labels = custom_labels) +  # Change cluster labels on X
+  scale_y_discrete(labels = custom_cluster_labels) +  # Change cluster labels on y
+  scale_color_gradientn(colors = c("blue", "white", "red"))  # Expression gradient
+dev.off()
+
+
+
+############################################################################################################
+
+
+
+#LSCS-egfp vs TA&Diff
+wh_cluster12vsTA_Dif <- FindMarkers(sc_subset_wh, ident.1 = 12, ident.2 = c(3, 1, 2, 4), test.use="wilcox",
+                                    only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+write.csv(wh_cluster12vsTA_Dif, file = "wh_cluster12vsTA_Dif.csv")
+
+
+# Set the new cluster identities based on EGFP-bGhpolyA expression
+# Add expression information for "EGFP-bGhpolyA"
+sc_subset_wh$EGFP_bGhpolyA_expr <- GetAssayData(object = sc_subset_wh, assay = "RNA", slot = "counts")["EGFP-bGhpolyA", ] > 0
+Idents(sc_subset_wh) <- sc_subset_wh$EGFP_bGhpolyA_expr
+# Perform DEA between cells expressing "EGFP-bGhpolyA" and those that do not
+deg_wilcox_EGFP_wh <- FindMarkers(sc_subset_wh, ident.1 = TRUE, ident.2 = FALSE,
+                               only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, 
+                               test.use="wilcox")
+# Save DEG results
+write.csv(deg_wilcox_EGFP_wh, file = "wh_DEG_EGFP_vs_Other_wilcox.csv", row.names = TRUE)
+
+
+
+##########################################################################
+#AUC
+######################################################################
+#pct (Percentage of expressing cells in group )
+# The p-value adjusted for multiple testing using the Benjamini-Hochberg (BH) correction to control the false discovery rate (FDR).
+#AUC > 0.8: Strong marker gene for distinguishing between clusters.
+#Statistical power : A measure of the statistical power of the test for each gene. 
+
+
+#Receiver Operating Characteristic (ROC) Test (`test.use = “roc”)
+Idents(sc_subset_wh) <- "seurat_clusters" 
+roc_wh <- FindAllMarkers(sc_subset_wh, test.use="roc", group.by="seurat_clusters",
+                        only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25 )
+write.csv(roc_wh, file = "wh_roc.csv")
+#roc_wh <- read.csv(file = "roc_wh2025.csv")
+# number of genes with AUC>0.7 for each cluster
+roc_wh <- table(roc_wh[roc_wh$myAUC>0.8,"cluster"])
+write.csv(roc8_wh, file = "wh_roc8.csv")
+
+# get top 5 genes for cluster 5
+cluster12_wh = roc_wh[roc_wh$cluster==12,]
+cluster12_top5_wh <- head(cluster12_wh[order(cluster12_wh[,1],decreasing=T),],5)
+# getting top 10 genes for all clusters
+library(dplyr)
+top10_wh <- roc_wh %>% group_by(cluster) %>% top_n(n=10, wt=myAUC)
+top10_wh
+
+
+# find all markers of cluster 12
+cluster12_roc_wh <- FindMarkers(sc_subset_wh, test.use="roc", ident.1 = 12, 
+                               only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, )
+write.csv(cluster12_roc_wh , file = "wh_cluster12_markers_roc.csv")
+
+#LSCs vs Diff & TA
+wh_roc_12vsTA_Dif <- FindMarkers(sc_subset_wh, ident.1 = 12, ident.2 = c(3, 1, 2, 4) , test.use="roc",
+                                 only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, )
+write.csv(wh_roc_12vsTA_Dif, file = "wh_cluster12vsTA_Dif_roc.csv")
+
+# Set the new cluster identities based on EGFP-bGhpolyA expression
+# Add expression information for "EGFP-bGhpolyA"
+sc_subset_wh$EGFP_bGhpolyA_expr <- GetAssayData(object = sc_subset_wh, assay = "RNA", slot = "counts")["EGFP-bGhpolyA", ] > 0
+Idents(sc_subset_wh) <- sc_subset_wh$EGFP_bGhpolyA_expr
+# Perform DEA between cells expressing "EGFP-bGhpolyA" and those that do not
+deg_roc_EGFP_wh <- FindMarkers(sc_subset_wh, ident.1 = TRUE, ident.2 = FALSE,
+                              only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, 
+                              test.use="roc")
+# Save DEG results
+write.csv(deg_roc_EGFP_wh, file = "wh_DEG_EGFP_vs_Other_roc.csv", row.names = TRUE)
+
+
+
+##########################################################################################
+#cell cycle
+##########################################################################################
+# A list of cell cycle markers, from Tirosh et al, 2015, is loaded with Seurat.  We can
+# segregate this list into markers of G2/M phase and markers of S phase
+s.genes <- cc.genes$s.genes
+g2m.genes <- cc.genes$g2m.genes
+
+#Assign Cell-Cycle Scores
+sc_subset_wh <- CellCycleScoring(sc_subset_wh, s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
+#2. Force Lowercase/Uppercase Matching
+rownames(sc_subset_wh) <- tolower(rownames(sc_subset_wh))
+s.genes <- tolower(cc.genes$s.genes)
+g2m.genes <- tolower(cc.genes$g2m.genes)
+sc_subset_wh <- CellCycleScoring(sc_subset_wh, s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
+#2. Remove Missing Genes from Lists
+s.genes <- s.genes[s.genes %in% rownames(sc_subset_wh)]
+g2m.genes <- g2m.genes[g2m.genes %in% rownames(sc_subset_wh)]
+
+sc_subset_wh <- CellCycleScoring(sc_subset_wh, s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
+
+DimPlot(sc_subset_wh, reduction = "pca", group.by = "Phase")
+DimPlot(sc_subset_wh, reduction = "umap", group.by = "Phase")
+VlnPlot(sc_subset_wh, features = c("S.Score", "G2M.Score"), ncol = 2)
+
+
+# view cell cycle scores and phase assignments
+head(sc_subset_wh[[]])
+
+# Visualize the distribution of cell cycle markers across
+
+png(filename="wh_ccycle_ridge.png")
+RidgePlot(sc_subset_wh, features = c("pcna", "top2a", "mcm6", "mki67"), ncol = 2)
+dev.off()
+#Pcna: S phase of the cell cycle, index of the proliferative activity of cancers.
+#TOP2A expression peaked in G2/M phase cells.
+#MCM6 is critical for the transition from the G1 phase to the S phase of the cell cycle.
+#MKI67 increased from the G1 phase to the mitotic phase. 
+
+# Running a PCA on cell cycle genes reveals, unsurprisingly, that cells separate entirely by phase
+sc_subset_wh <- RunPCA(sc_subset_wh, features = c(s.genes, g2m.genes))
+
+#saveRDS(sc_subset_wh, file = "sc_subset_wh_cycle.rds")
+
+png(filename="sc_subset_wh_ccycle.png")
+DimPlot(sc_subset_wh)
+dev.off()
+png(filename="sc_subset_wh_ccycle_s3_s4.png")
+DimPlot(sc_subset_wh, split.by = 'orig.ident')
+dev.off()
+
+# Create the table for cell cycle phases across seurat clusters
+wh_ccycle_table <- table(sc_subset_wh@meta.data$Phase,sc_subset_wh@meta.data$seurat_clusters )
+write.csv(wh_ccycle_table, file="wh_ccycle_table.csv", row.names = TRUE)
+
+# Convert the table to a data frame for easier manipulation
+cycle_table_wh_df <- as.data.frame.matrix(wh_ccycle_table)
+
+# Calculate the percentage of cells in each phase within each cluster
+cycle_percentage_wh <- sweep(cycle_table_wh_df, 2, colSums(cycle_table_wh_df), FUN = "/") * 100
+
+# Write the percentage table to a CSV file
+write.csv(cycle_percentage_wh, file = "wh_cycle_percentage_table2025.csv", row.names = TRUE)
+
+# Install and load the pheatmap package (if not already installed)
+if (!requireNamespace("pheatmap", quietly = TRUE)) {
+  install.packages("pheatmap")
+}
+library(pheatmap)
+# Create a custom annotation for the x-axis (clusters)
+cluster_annotation <- data.frame(
+  Cluster = colnames(cycle_percentage_wh) # Cluster names
+)
+rownames(cluster_annotation) <- colnames(cycle_percentage_wh) # Set rownames to match heatmap column names
+
+# Generate the heatmap
+png(filename ="cycle_percentage_wh_heatmap.png" )
+cycle_percentage_wh_heatmap <- pheatmap(
+  mat = cycle_percentage_wh,                # Data matrix
+  color = colorRampPalette(c("blue", "white", "red"))(100), # Gradient from blue (low) to red (high)
+  cluster_rows = FALSE,                    # Disable clustering for rows (phases)
+  cluster_cols = FALSE,                    # Disable clustering for columns (clusters)
+  display_numbers = TRUE,                  # Show the percentage values on the heatmap
+  fontsize_number = 10,                    # Font size for displayed numbers
+  main = "Cell Cycle Phases Across Clusters", # Title of the heatmap
+  fontsize_row = 12,                       # Font size for row labels
+  fontsize_col = 12,                        # Font size for column labels
+  annotation_col = cluster_annotation,      # Add the cluster annotation to the x-axis
+  angle_col = 45                           # Rotate cluster numbers by 45 degrees
+)
+dev.off()
+
+
+
+##########################################################################################
+#Pseudotime
+##########################################################################################
+saveRDS(sc_subset_wh_join,"sc_subset_wh_join.rds")
+sc_subset_wh_join <- readRDS("sc_subset_wh_join.rds")
+library(monocle)
+library(Seurat)
+# source the R script
+source("https://uic-ric.github.io/workshop-data/scrna/importCDS2.R")
+# use the importCDS2 function (our function) instead of importCDS (monocle function)
+monocle_data <- importCDS2(sc_subset_wh_join)
+monocle_data
+
+#Estimate size factors and pick which genes to use
+monocle_data <- estimateSizeFactors(monocle_data)
+monocle_data <- setOrderingFilter(monocle_data, sc_subset_wh_join@assays$RNA@var.features)
+#Reduce dimensions - this step may take awhile
+monocle_data <- reduceDimension(monocle_data, max_components=2, method='DDRTree') #spend 2 days
+#Infer the cell ordering (pseudotime). 
+monocle_data <- orderCells(monocle_data)
+#Try different visualizations
+png(filename="wh_monocle.png")
+plot_cell_trajectory(monocle_data)
+dev.off()
+#saveRDS(monocle_data, file="monocle_data.rds")
+
+plot_cell_trajectory(monocle_data, color_by = "Pseudotime")
+#Color by seurat cluster
+png(filename="wh_monocle_RNA_snn_res.png")
+plot_cell_trajectory(monocle_data, color_by = "RNA_snn_res.0.6")
+#RNA_snn_res.0.5 is present in sc_subset_wh_join@meta.data, it will be transferred to monocle_data.
+dev.off()
+
+head(pData(monocle_data))
+# Get the top marker gene for cluster 12
+roc_stats_wh <- readRDS("roc_stats_wh.rds")
+topgene = rownames(roc_stats_wh[roc_stats_wh$cluster==12,])[1]
+# plot using gene expression as size of dot
+png(filename="wh_monocle_c12_g1.png")
+plot_cell_trajectory(monocle_data, color_by = "RNA_snn_res.0.6", markers = topgene)
+dev.off()
+#Can plot pseudotime vs gene expression using color
+png(filename="wh_monocle_c12_g1_expression.png")
+plot_cell_trajectory(monocle_data, markers = topgene, use_color_gradient=T)
+dev.off
+head(t(monocle_data@reducedDimS))
+
+#3.2 Statistics with Pseudotime
+to_test <- sc_subset_wh_join@assays$RNA@features
+monocle_subset <- monocle_data[to_test,]#Error
+
+# Ensure 'to_test' contains valid gene identifiers that exist in 'monocle_data'
+#to_test <- intersect(to_test, rownames(monocle_data))
+
+# Subset the CellDataSet using Monocle's subset function
+monocle_subset <- monocle_data[to_test, , drop=FALSE]
+# Plot cell trajectory using the subsetted dataset and specified marker
+plot_cell_trajectory(monocle_subset, markers = topgene, use_color_gradient = TRUE)
+
+pseudotime_test <- differentialGeneTest(monocle_subset,fullModelFormulaStr="~sm.ns(Pseudotime)")#error
+head(pseudotime_test)
+plot_genes_in_pseudotime(monocle_subset[1,], color_by = "Pseudotime")#error
+pseudotime <- pData(monocle_data)$Pseudotime 
+# Extract the scaled data matrix
+expression <- GetAssayData(sc_subset_wh_join, assay = "RNA", layer = "scale.data")[1:20, ]
+spearman.corrs <- data.frame(t(apply(expression,1,function(x){
+  r=cor.test(x,pseudotime,method="spearman"); return(c(r$estimate, r$p.value))})))
+colnames(spearman.corrs) = c("rho","p.value")
+# add FDR correction
+q.value <- p.adjust(spearman.corrs$p.value,method="fdr")
+spearman.corrs <- cbind(spearman.corrs,q.value)
+# sort by p-value
+spearman.corrs <- spearman.corrs[order(spearman.corrs$p.value),]
+# see what the final table looks like
+head(spearman.corrs)
+# plot the top gene
+top_gene <- rownames(spearman.corrs)[1]
+png(filename="wh_monocle_c12_g1_expression_scaled.png")
+plot(pseudotime, expression[top_gene,],xlab="Pseudotime",ylab="Scaled Expression",
+     main=top_gene)
+dev.off
+
+#3.2.2 Compare our cell clusters with pseudotime
+clusters <- sc_subset_wh_join@meta.data$RNA_snn_res.0.6
+pseudotime <- pData(monocle_data)$Pseudotime
+cluster_vs_time <- data.frame(clusters, pseudotime)
+png(filename="wh_monocle_cluster_pseudotime.png")
+boxplot(pseudotime ~ clusters, data=cluster_vs_time, xlab="Cluster",ylab="Pseudotime")
+dev.off()
+kruskal.test(pseudotime ~ clusters)
+#Kruskal-Wallis rank sum test
+#data:  pseudotime by clusters
+#Kruskal-Wallis chi-squared = 10518, df = 12, p-value < 2.2e-16
+
+
+
+
+#################################################################################
+#Gene Set Enrichment Analysis (GSEA) on the GSEA-MSigDB website, 
+#################################################################################
+
+#Step 1: Load Your DEG Results and Load necessary libraries
+library(dplyr)
+library(readr)
+# Read the DEG file
+deg_data <- read_excel("wh_cluster12vsTA_wilcox.xlsx",  col_names = TRUE)
+# View the first few rows
+head(deg_data)
+
+#Step 2: Prepare a Ranked Gene List for GSEA
+
+# Rank genes by log2 fold-change
+ranked_genes <- deg_data %>%
+  arrange(desc(avg_log2FC)) %>% # Sort in descending order
+  dplyr::select(Gene, avg_log2FC) #Force dplyr::select() Explicitly
+
+# Convert to named vector for GSEA
+gene_list <- setNames(ranked_genes$avg_log2FC, ranked_genes$Gene)
+
+# Save ranked gene list to a file for GSEA input
+write.table(ranked_genes, file = "wh_ranked_genes.rnk", sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE)
+
+#Step 3: Run GSEA in R (fgsea)
+
+# Install fgsea if not installed
+if (!requireNamespace("fgsea", quietly = TRUE)) {
+  install.packages("BiocManager")
+  BiocManager::install("fgsea")
+}
+
+#####~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#####Step 3 pathway selection: Load MSigDB Gene Sets associated with stem cell pathway
+#####~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Load necessary libraries
+library(msigdbr)
+library(fgsea)
+library(ggplot2)
+library(dplyr)
+library(pheatmap)
+
+# 1: Load MSigDB Gene Sets (Stem Cell Pathways)
+msigdb <- msigdbr(species = "Mus musculus")
+stem_cell_pathways <- msigdb %>%
+  filter(grepl("stem|pluripotent|progenitor|self-renew|embryonic", gs_name, ignore.case = TRUE))
+
+# 2: Prepare Gene Sets for GSEA
+gene_sets <- split(stem_cell_pathways$gene_symbol, stem_cell_pathways$gs_name)
+# 3: Run GSEA
+fgsea_results <- fgsea(pathways = gene_sets,
+                       stats = gene_list,
+                       minSize = 10,
+                       maxSize = 500,
+                       nperm = 10000)
+
+#####~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#Step 4
+#####~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#pathway sort and show
+# Sort and show top enriched pathways
+fgsea_results <- fgsea_results %>% arrange(padj)
+head(fgsea_results)
+
+# Convert list column to character for saving
+fgsea_results$leadingEdge <- sapply(fgsea_results$leadingEdge, function(x) paste(x, collapse = ";"))
+head(fgsea_results)
+
+# Save results to CSV
+#write.csv(fgsea_results, "wh_GSEA_results.csv", row.names = FALSE)
+write.xlsx(fgsea_results, "wh_GSEA_StemCell_results.xlsx")
+
+#select GSEA
+significant_pathways <- fgsea_results %>%
+  filter(padj < 0.05) %>%
+  arrange(padj)  # Sort by significance
+
+top_upregulated <- significant_pathways %>%
+  filter(NES > 0) %>%
+  arrange(desc(NES))  # Strongest positive enrichment
+
+top_downregulated <- significant_pathways %>%
+  filter(NES < 0) %>%
+  arrange(NES)  # Strongest negative enrichment
+
+moderate_size_pathways <- significant_pathways %>%
+  filter(size > 15, size < 500)
+
+library(ggplot2)
+
+ggplot(significant_pathways, aes(x = reorder(pathway, NES), y = NES, fill = NES > 0)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Top Enriched Pathways (FGSEA)", x = "Pathway", y = "Normalized Enrichment Score") +
+  scale_fill_manual(values = c("red", "blue"), labels = c("Downregulated", "Upregulated"))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+##########################################################################################
+#Reference code
+##########################################################################################
+## Extract UMAP embeddings to plot "EGFP-bGhpolyA" expression
+umap_data <- Embeddings(sc_subset_whcluster_join, "umap") %>%
+  as.data.frame() %>%
+  mutate(cell = rownames(.), EGFP_bGhpolyA_expr = sc_subset_whcluster_join$EGFP_bGhpolyA_expr)
+
+# Create a UMAP plot highlighting cells expressing "EGFP-bGhpolyA"
+png(filename = "umap_EGFP_bGhpolyA_highlight.png")
+ggplot(umap_data, aes(x = UMAP_1, y = UMAP_2, color = as.factor(EGFP_bGhpolyA_expr))) +
+  geom_point(size = 1, alpha = 0.8) +  # Added transparency for better visualization if points overlap
+  scale_color_manual(values = c("gray", "red"), 
+                     labels = c("Not Expressed", "Expressed"),
+                     name = "EGFP_bGhpolyA Expression") +
+  labs(title = "UMAP Plot Highlighting EGFP_bGhpolyA Expressing Cells") +
+  theme_minimal() +
+  theme(legend.position = "right")  # Adjust legend position if needed
+dev.off()
+
+
+
+
+
+
+
+
+##############################################################################################
+#################################Manipulate clusters##########################################
+#################Differential expression analysis(DEG) on selected cluster####################
+# Merge clusters 6 and 9 and 12
+seurat$merged_clusters <- ifelse(Idents(seurat) %in% c(6, 9, 12), "Cluster6_9_12", "Other")
+
+# Set the new cluster identities as the active identity
+Idents(seurat) <- seurat$merged_clusters
+
+# Perform DEA between merged cluster and the rest of the cells
+deg_results <- FindMarkers(seurat, ident.1 = "
