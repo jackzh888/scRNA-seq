@@ -8,6 +8,7 @@ library( readxl)
 setwd("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ")
 sc_subset_c <- readRDS("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_sc_subset_joinlayer.rds")
 
+
 # Paths to CellRanger outputs
 path1 <- "/Users/jackzhou/Desktop/Project_Sox9/Row data_CellRanger/Cornea1/filtered_feature_bc_matrix"
 path2 <- "/Users/jackzhou/Desktop/Project_Sox9/Row data_CellRanger/Cornea2/filtered_feature_bc_matrix"
@@ -24,6 +25,7 @@ seurat2 <- CreateSeuratObject(counts = data2, project = "Sample2")
 seurat_c <- merge(seurat1, y = seurat2, project = "MergedDataset", add.cell.ids=c("s1","s2"))
 seurat_c
 head(seurat_c$orig.ident)
+saveRDS(seurat_c, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/seurat_c.rds")
 
 # count how many cells are in each sample using table()
 table(seurat_c$orig.ident)
@@ -104,13 +106,38 @@ sc_subset_c <- RunPCA(sc_subset_c,features=VariableFeatures(object=sc_subset_c),
 # plots
 ElbowPlot(sc_subset_c,ndims=24)
 DimHeatmap(sc_subset_c,dims=1:24,cells=300,balanced=T)
+
+
+##########################################################################
+#Data Integration and/or Batch-effect correction
+##########################################################################
+#install.packages("harmony")  
+library(harmony)
+# Add sample/batch identity from original Seurat objects
+sc_subset_c$batch <- ifelse(grepl("^s1_", colnames(sc_subset_c)), "Sample1", "Sample2")
+# Run Harmony using 'batch' as the grouping variable
+sc_subset_c <- RunHarmony(sc_subset_c, group.by.vars = "batch", dims.use = 1:50, max.iter.harmony = 100)
+
+
 ###########################################################################################
 #Dimensional reduction
 ###########################################################################################
 # Clustering
 # Run clustering on the top PCs to filter out noise
 pca.dims1 = 1:12#13 cluster
-sc_subset_c <- FindNeighbors(sc_subset_c, dims=pca.dims1)
+#sc_subset_c <- FindNeighbors(sc_subset_c, dims=pca.dims1)
+
+
+# Use Harmony embeddings instead of PCA
+pca.dims1 <- 1:12
+
+sc_subset_c <- FindNeighbors(sc_subset_c, reduction = "harmony", dims = pca.dims1)
+
+sc_subset_c <- FindClusters(sc_subset_c, resolution = 0.5, algorithm = 2)
+
+sc_subset_c <- RunUMAP(sc_subset_c, reduction = "harmony", dims = pca.dims1)
+#Optional QC visualization
+DimPlot(sc_subset_c, group.by = "batch", reduction = "umap") + ggtitle("Harmony-corrected UMAP")
 
 ##########################################################################################
 #To optimize resolution by silhouette and clusteree      
@@ -297,15 +324,22 @@ barplot(cluster_counts_c_EGFP2$total_count )
 
 write.xlsx(cluster_counts_c_EGFP2,  "c_cluster_counts_EGFP2.xlsx")
 
-#Trpm8
-seurat_c$Trpm8_expr <- GetAssayData(object = sc_subset_c, assay = "RNA", slot = "counts")["Trpm8", ] > 0
-sum(counts_c["Trpm8",]>0)
+#####################################################
+# check expression information for "Trpm8"
+sc_subset_c$Nfkb1_expr <- GetAssayData(object = sc_subset_c, assay = "RNA", slot = "counts")["Sp1", ] > 0
+counts_c<-GetAssayData(object = sc_subset_c ,  assay = "RNA", layer = "counts")
+sum(counts_c["Nfkb1",]>0)
+sum(counts_c1["Trpm8",]>0)
+sum(counts_c2["Trpm8",]>0)
+VlnPlot(sc_subset_c, features = c("Nfkb1")) 
+DotPlot(sc_subset_c, features = c("Sp1"))
 
 
 ###########################################################################################
 #Differential expression with respect to clusters
 Idents(sc_subset_c) <- "seurat_clusters" 
-c_markers_roc <- FindAllMarkers(sc_subset_c, test.use="roc", min.pct = 0.25, only.pos = TRUE, logfc.threshold = 0.25) #only.pos = TRUE,
+c_markers_roc <- FindAllMarkers(sc_subset_c, test.use="roc", min.pct = 0.25, logfc.threshold = 0.25) #only.pos = TRUE,
+saveRDS(c_markers_roc, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_markers_roc.rds")
 
 #filter by p_val_adj
 #markers_c_filter <- markers_c %>% filter(p_val_adj < 0.05)
@@ -326,17 +360,18 @@ library(dplyr)
 top_roc <- c_markers_roc %>% group_by(cluster) %>% top_n(n=10, wt=myAUC)
 
 top_roc_c12 <- c_markers_roc %>%
-  filter(cluster == 12) %>%   # First, filter only cluster 12
-  top_n(n = 100, wt = myAUC)   # Then select the top 100 based on myAUC
-write.xlsx(top_roc_c12,"top_roc_c12.xlsx", rowNames=F)
+  filter(cluster == 12) #%>%   # First, filter only cluster 12
+  #top_n( wt = myAUC)  
+  #top_n(n = 100, wt = myAUC)   # Then select the top 100 based on myAUC
+write.xlsx(top_roc_c12,"c_top_roc_c12.xlsx", rowNames=F)
 
 #Heatmap of top genes for all clusters
 
 library(Seurat)
 library(ggplot2)
 
-png(filename = "top_wil_clusters_heatmap_c.png", width = 1200, height = 1000)
-DoHeatmap(sc_subset_c, features = top10$gene) +
+png(filename = "c_top_roc_clusters_heatmap.png", width = 1200, height = 1000)
+DoHeatmap(sc_subset_c, features = top_roc$gene) +
   ggtitle("Corneal Homeostasis Top Genes") +
   scale_fill_gradientn(colors = c("blue", "white", "red"))  # Blue to red scale
 
@@ -441,6 +476,8 @@ dev.off()
 ###################################################################################################
 # find the DEG markers of LSCs-EGFP vs TA
 ###################################################################################################
+
+#LSC-EGFP vs TA by Wil
 Idents(sc_subset_c) <- "seurat_clusters" 
 #run stats with Wilcox and ROC
 
@@ -452,6 +489,7 @@ c_clusterStemVsTA_wil<- FindMarkers(sc_subset_c, ident.1 = stem_cluster , ident.
                                     min.pct = 0.25, logfc.threshold = 0.25) #only.pos = TRUE 
 head(c_clusterStemVsTA_wil)
 write.xlsx(c_clusterStemVsTA_wil, file = "c_clusterStemVsTA_wil.xlsx", rowNames=T)
+c_clusterStemVsTA_wil <- read_excel("c_clusterStemVsTA_wil.xlsx", col_names = T)
 
 #filter by p_val_adj<0.05
 head(c_clusterStemVsTA_wil)
@@ -466,28 +504,32 @@ head(df)
 
 #The gene names are actually stored as row names.generate new column with Gene name.
 df <- df %>% rownames_to_column(var = "Gene") # Move row names into a new column
-#df <- df[, -1]
+
 write.xlsx(df, file = "c_clusterStemVsTA_wil_filter.xlsx", rowNames = TRUE) 
 c_clusterStemVsTA_wil_filter <- read_excel("c_clusterStemVsTA_wil_filter.xlsx", col_names = TRUE)
+
 #only the up regulated gene
-head(c_clusterStemVsTA_wil_filter)
-c_clusterStemVsTA_wil_filter_up <- filter (c_clusterStemVsTA_wil_filter, avg_log2FC>0)%>%
-  arrange(avg_log2FC)
-write.xlsx(c_clusterStemVsTA_wil_filter_up, "c_clusterStemVsTA_wil_filter_up.xlsx", rownames=TRUE)
-
-
-
-
+#head(c_clusterStemVsTA_wil_filter)
+#c_clusterStemVsTA_wil_filter_up <- filter (c_clusterStemVsTA_wil_filter, avg_log2FC>0)%>%
+#  arrange(avg_log2FC)
+#write.xlsx(c_clusterStemVsTA_wil_filter_up, "c_clusterStemVsTA_wil_filter_up.xlsx", rownames=TRUE)
 
 
 #Roc
 c_clusterStemVsTA_roc<- FindMarkers(sc_subset_c, ident.1 = stem_cluster , ident.2 = TA_cluster , test.use="roc",
                                     min.pct = 0.25, logfc.threshold = 0.25)
 head(c_clusterStemVsTA_roc)
-write.xlsx(c_clusterStemVsTA_roc, file = "c_clusterStemVsTA_roc.xlsx", rowNames=T)
+#in order to save it to excel with gene name.
+df <- as.data.frame.matrix(c_clusterStemVsTA_roc)
+head(df)
+
+#The gene names are actually stored as row names.generate new column with Gene name.
+df <- df %>% rownames_to_column(var = "Gene") # Move row names into a new column
+
+write.xlsx(df, file = "c_clusterStemVsTA_roc.xlsx", col_names = TRUE)
 
 #filter by myAUC
-head(c_clusterStemVsTA_roc)
+c_clusterStemVsTA_roc <- read_excel("c_clusterStemVsTA_roc.xlsx",  col_names = TRUE)
 c_clusterStemVsTA_roc_filter <- filter (c_clusterStemVsTA_roc, myAUC>0.7)%>%
   arrange(avg_log2FC)
 head(c_clusterStemVsTA_roc_filter) 
@@ -500,7 +542,6 @@ c_clusterStemVsTA_roc_filter <- read_excel("c_clusterStemVsTA_roc_filter.xlsx", 
 avg_exp <- read_excel("c_avg_exp.xlsx",  col_names = TRUE)
 
  
-
 #inner_join the two statistics test results from wilcoxin and roc 
 c_cluster12vsTA_wil_roc_join_filter <- inner_join(c_clusterStemVsTA_wil_filter, c_clusterStemVsTA_roc_filter, by="Gene")
 write.xlsx(c_cluster12vsTA_wil_roc_join_filter, file="c_cluster12vsTA_wil_roc_join_filter.xlsx", rownames=T)
@@ -514,6 +555,22 @@ c_cluster12vsTA_wil_roc_Aveexp <- avg_exp  %>%
 write.xlsx(c_cluster12vsTA_wil_roc_Aveexp, "c_cluster12vsTA_wil_roc_Aveexp.xlsx", rowNames=F)
 c_cluster12vsTA_wil_roc_Aveexp <- read_excel("c_cluster12vsTA_wil_roc_Aveexp.xlsx", col_names = TRUE)
 
+############################################
+# find all markers of cluster 12
+cluster12_markers_c1 <- FindMarkers(sc_subset_c, ident.1 = 12, test.use="wilcox", 
+                                      min.pct = 0.25, logfc.threshold = 0.25 ) #only.pos = TRUE,
+cluster12_markers_c1 <- filter (cluster12_markers_c1, p_val_adj<0.05)%>%
+  arrange(avg_log2FC)
+write.xlsx(cluster12_markers_c1, file = "c_cluster12_markers_wil.xlsx", rowNames=T)
+cluster12_markers_c1 <- read_excel("c_cluster12_markers_wil.xlsx",  col_names = TRUE)
+# find all markers of cluster 12
+cluster12_markers_c2 <- FindMarkers(sc_subset_c, ident.1 = 12, test.use="roc",
+                                      min.pct = 0.25, logfc.threshold = 0.25 ) #only.pos = TRUE,
+write.xlsx(cluster12_markers_c2, file = "c_cluster12_markers_roc.xlsx", rowNames=T)
+cluster12_markers_c2 <- read_excel("c_cluster12_markers_roc.xlsx",  col_names = TRUE)
+#innerjoin genes of cluster 12
+c_cluster12_wil_roc_join <- inner_join(cluster12_markers_c1, cluster12_markers_c2, by="Gene")
+write.xlsx(c_cluster12_wil_roc_join , file = "c_cluster12_wil_roc_join.xlsx",  rowNames=T)
 
 
 #==================================================
@@ -602,6 +659,50 @@ cycle_percentage_c_heatmap <- pheatmap(
 )
 dev.off()
 
+##################################################
+#TF found from TRRUST of Metascape
+##################################################
+#dot plot for Transcription Factors
+# Subset to clusters 5, 7, and 12
+#sc_subset_c_sub <- subset(sc_subset_c, idents = c(5, 7, 12))
+Trrust <- c("Sp1", "Nfkb1", "Rela", 'Stat3',	'Usf2',	'Sp3',	'Jun', 	'Pparg', 	'Atf2',	'E2f1',	'Spi1',	'Smad4',	'Cebpb',	'Foxa1',	'Esr1',	'Etv4',	'Mecp2',	'Nr3c1',	'Elk1',	'Pml', 'Usf1',	'Atf1',	'Srf',	'Egr1',	'Tfap2a',	'Hdac1',	'Ar',	'Zeb1')
+
+# Custom cluster labels for 13 clusters (0 to 12)
+custom_cluster_labels <- c(
+  '0' = 'BC',
+  '1' = 'TD',
+  '2' = 'TD',
+  '3' = 'TD',
+  '4' = 'UC',
+  '5' = 'TA',
+  '6' = 'BC',
+  '7' = 'TA',
+  '8' = 'Conj',
+  '9' = 'LSC',
+  '10' = 'BC',
+  '11' = 'PC',
+  '12' = 'LSC'
+)
+png(filename="c_dot_Transcription factors.png", width = 1000, height = 400)
+DotPlot(sc_subset_c, features = Trrust )+ RotatedAxis()+
+  ggtitle("Candidate Transcription Factors in Homeostasis") +
+  scale_y_discrete(labels = custom_cluster_labels) +  # Change cluster labels on y
+  scale_color_gradientn(colors = c("blue", "white", "red"))  # Expression gradient
+dev.off()
+
+
+
+  ############################################             
+  #check Candidate by dotplot
+  #############################################
+  png(filename="c_dot_Candidate.png", width = 500, height = 400)
+  features <- c('Krt8', 'Krt18','Anxa3', 'Fmo1','Fmo2','Gabrp','Alcam')
+  DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+    ggtitle("Candidate Cell Marker in Homeostasis") +
+    scale_color_gradientn(colors = c("blue", "white", "red"))
+  dev.off()
+              
+              
 ##################################################
 #Using Monocle For Pseudotime Trajectory (Time permits)
 ##################################################
@@ -1172,6 +1273,9 @@ topTFs <- names(sort(rowMeans(regulonAUC@assays$data$AUC), decreasing = TRUE)[1:
 Heatmap(regulonAUC@assays$data$AUC[topTFs, ], cluster_rows = TRUE, cluster_columns = TRUE)
 
 print("SCENIC analysis completed for LSC_C12. Key Regulators Identified.")
+
+
+
 
 
 #=================================================================================
