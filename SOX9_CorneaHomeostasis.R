@@ -325,35 +325,28 @@ barplot(cluster_counts_c_EGFP2$total_count )
 write.xlsx(cluster_counts_c_EGFP2,  "c_cluster_counts_EGFP2.xlsx")
 
 #####################################################
-# check expression information for "Trpm8"
-sc_subset_c$Nfkb1_expr <- GetAssayData(object = sc_subset_c, assay = "RNA", slot = "counts")["Sp1", ] > 0
+# check expression information for "EGFP_bGhpolyA"
+sc_subset_c$Nfkb1_expr <- GetAssayData(object = sc_subset_c, assay = "RNA", slot = "counts")["EGFP_bGhpolyA", ] > 0
 counts_c<-GetAssayData(object = sc_subset_c ,  assay = "RNA", layer = "counts")
-sum(counts_c["Nfkb1",]>0)
-sum(counts_c1["Trpm8",]>0)
-sum(counts_c2["Trpm8",]>0)
-VlnPlot(sc_subset_c, features = c("Nfkb1")) 
-DotPlot(sc_subset_c, features = c("Sp1"))
+sum(counts_c["EGFP_bGhpolyA",]>0)
+sum(counts_c1["EGFP_bGhpolyA",]>0)
+sum(counts_c2["EGFP_bGhpolyA",]>0)
+VlnPlot(sc_subset_c, features = c("EGFP_bGhpolyA")) 
+DotPlot(sc_subset_c, features = c("EGFP_bGhpolyA"))
 
 
-###########################################################################################
+##################################################################################################################################
 #Differential expression with respect to clusters
 Idents(sc_subset_c) <- "seurat_clusters" 
 c_markers_roc <- FindAllMarkers(sc_subset_c, test.use="roc", min.pct = 0.25, logfc.threshold = 0.25) #only.pos = TRUE,
 saveRDS(c_markers_roc, file = "/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/c_markers_roc.rds")
-
-#filter by p_val_adj
-#markers_c_filter <- markers_c %>% filter(p_val_adj < 0.05)
-
-#filter by roc>0.7
-#c_markers_roc_filter <- c_markers_roc%>% filter(myAUC >0.7)
-
 
 #write.csv(markers_c, file = "markers_c2025.csv")
 #write.xlsx(markers_c,"markers_c2025.xlsx", rowNames=F)
 write.xlsx(c_markers_roc,"c_markers_roc.xlsx", rowNames=F)
 #markers_c <- read_excel("markers_c2025.xlsx")
 #c_12 <- markers_c$cluster 
-
+########################################################################################################################
 # getting top 10 genes for all clusters
 library(dplyr)
 #top10 <- markers_c %>% group_by(cluster) %>% top_n(n=10, wt=avg_log2FC)
@@ -364,7 +357,7 @@ top_roc_c12 <- c_markers_roc %>%
   #top_n( wt = myAUC)  
   #top_n(n = 100, wt = myAUC)   # Then select the top 100 based on myAUC
 write.xlsx(top_roc_c12,"c_top_roc_c12.xlsx", rowNames=F)
-
+########################################################################################################################
 #Heatmap of top genes for all clusters
 
 library(Seurat)
@@ -469,114 +462,157 @@ dev.off()
 
 
 
-
-
+###################################################################################################
+# Strategy 1. find the DEGs of LSCs-EGFP vs TA
+###################################################################################################
+    
+    #LSC-EGFP vs TA by Wil
+    Idents(sc_subset_c) <- "seurat_clusters" 
+    #run stats with Wilcox and ROC
+    stem_cluster <- 12  # replace with the actual stem cell cluster ID
+    TA_cluster <-  c(5,7) # replace with TA cluster IDs
+    Idents(sc_subset_c) <- "seurat_clusters" 
+    #Wilcox
+    c_clusterStemVsTA_wil<- FindMarkers(sc_subset_c, ident.1 = stem_cluster , ident.2 = TA_cluster , test.use="wilcox",
+                                        min.pct = 0.25, logfc.threshold = 0.25)  
+    head(c_clusterStemVsTA_wil)
+    write.xlsx(c_clusterStemVsTA_wil, file = "c_clusterStemVsTA_wil.xlsx", rowNames=T)
+    c_clusterStemVsTA_wil <- read_excel("c_clusterStemVsTA_wil.xlsx", col_names = T)
+    
+    #filter by p_val_adj<0.05
+    head(c_clusterStemVsTA_wil)
+    c_clusterStemVsTA_wil_filter <- filter (c_clusterStemVsTA_wil, p_val_adj<0.05)%>%
+        arrange(avg_log2FC)
+    head(c_clusterStemVsTA_wil_filter) 
+    
+    #lost genes name by saving, so
+    #in order to save it to excel with gene name.
+    df <- as.data.frame.matrix(c_clusterStemVsTA_wil_filter)
+    head(df)
+    
+    #The gene names are actually stored as row names.generate new column with Gene name.
+    df <- df %>% rownames_to_column(var = "Gene") # Move row names into a new column
+    
+    write.xlsx(df, file = "c_clusterStemVsTA_wil_filter.xlsx", rowNames = TRUE) 
+    c_clusterStemVsTA_wil_filter <- read_excel("c_clusterStemVsTA_wil_filter.xlsx", col_names = TRUE)
+    
+    #only the up regulated gene
+    #head(c_clusterStemVsTA_wil_filter)
+    #c_clusterStemVsTA_wil_filter_up <- filter (c_clusterStemVsTA_wil_filter, avg_log2FC>0)%>%
+    #  arrange(avg_log2FC)
+    #write.xlsx(c_clusterStemVsTA_wil_filter_up, "c_clusterStemVsTA_wil_filter_up.xlsx", rownames=TRUE)
+    
+    
+    #Roc
+    c_clusterStemVsTA_roc<- FindMarkers(sc_subset_c, ident.1 = stem_cluster , ident.2 = TA_cluster , test.use="roc",
+                                        min.pct = 0.25, logfc.threshold = 0.25)
+    head(c_clusterStemVsTA_roc)
+    #in order to save it to excel with gene name.
+    df <- as.data.frame.matrix(c_clusterStemVsTA_roc)
+    head(df)
+    
+    #The gene names are actually stored as row names.generate new column with Gene name.
+    df <- df %>% rownames_to_column(var = "Gene") # Move row names into a new column
+    
+    write.xlsx(df, file = "c_clusterStemVsTA_roc.xlsx", col_names = TRUE)
+    
+    #filter by myAUC
+    c_clusterStemVsTA_roc <- read_excel("c_clusterStemVsTA_roc.xlsx",  col_names = TRUE)
+    c_clusterStemVsTA_roc_filter <- filter (c_clusterStemVsTA_roc, myAUC>0.7)%>%
+      arrange(avg_log2FC)
+    head(c_clusterStemVsTA_roc_filter) 
+    write.xlsx(c_clusterStemVsTA_roc_filter, file="c_clusterStemVsTA_roc_filter.xlsx", rownames=T)
+    
+    
+    #adding the column name with 'Gene', then read the file 
+    c_clusterStemVsTA_wil_filter <- read_excel("c_clusterStemVsTA_wil_filter.xlsx",  col_names = TRUE)
+    c_clusterStemVsTA_roc_filter <- read_excel("c_clusterStemVsTA_roc_filter.xlsx",  col_names = TRUE)
+    avg_exp <- read_excel("c_avg_exp.xlsx",  col_names = TRUE)
+    
+    ######################################################################## 
+    #inner_join the two statistics test results from wilcoxin and roc 
+    c_cluster12vsTA_wil_roc_join_filter <- inner_join(c_clusterStemVsTA_wil_filter, c_clusterStemVsTA_roc_filter, by="Gene")
+    write.xlsx(c_cluster12vsTA_wil_roc_join_filter, file="c_cluster12vsTA_wil_roc_join_filter.xlsx", rownames=T)
+    c_cluster12vsTA_wil_roc_join_filter <- read_excel("c_cluster12vsTA_wil_roc_join_filter.xlsx", col_names = TRUE)
+    
+    
+    #inner_join the two statistics test results with the original average expression data
+    c_cluster12vsTA_wil_roc_Aveexp <- avg_exp  %>%
+      inner_join(c_clusterStemVsTA_wil, by = "Gene")%>%
+      inner_join(c_clusterStemVsTA_roc, by = "Gene") 
+    write.xlsx(c_cluster12vsTA_wil_roc_Aveexp, "c_cluster12vsTA_wil_roc_Aveexp.xlsx", rowNames=F)
+    c_cluster12vsTA_wil_roc_Aveexp <- read_excel("c_cluster12vsTA_wil_roc_Aveexp.xlsx", col_names = TRUE)
 
 
 ###################################################################################################
-# find the DEG markers of LSCs-EGFP vs TA
+# Strategy 2. find the DEG markers of cluster 12
 ###################################################################################################
 
-#LSC-EGFP vs TA by Wil
-Idents(sc_subset_c) <- "seurat_clusters" 
-#run stats with Wilcox and ROC
-
-stem_cluster <- 12  # replace with the actual stem cell cluster ID
-TA_cluster <-  c(5,7) # replace with TA cluster IDs
-Idents(sc_subset_c) <- "seurat_clusters" 
-#Wilcox
-c_clusterStemVsTA_wil<- FindMarkers(sc_subset_c, ident.1 = stem_cluster , ident.2 = TA_cluster , test.use="wilcox",
-                                    min.pct = 0.25, logfc.threshold = 0.25) #only.pos = TRUE 
-head(c_clusterStemVsTA_wil)
-write.xlsx(c_clusterStemVsTA_wil, file = "c_clusterStemVsTA_wil.xlsx", rowNames=T)
-c_clusterStemVsTA_wil <- read_excel("c_clusterStemVsTA_wil.xlsx", col_names = T)
-
-#filter by p_val_adj<0.05
-head(c_clusterStemVsTA_wil)
-c_clusterStemVsTA_wil_filter <- filter (c_clusterStemVsTA_wil, p_val_adj<0.05)%>%
-    arrange(avg_log2FC)
-head(c_clusterStemVsTA_wil_filter) 
-
-#lost genes name by saving, so
-#in order to save it to excel with gene name.
-df <- as.data.frame.matrix(c_clusterStemVsTA_wil_filter)
-head(df)
-
-#The gene names are actually stored as row names.generate new column with Gene name.
-df <- df %>% rownames_to_column(var = "Gene") # Move row names into a new column
-
-write.xlsx(df, file = "c_clusterStemVsTA_wil_filter.xlsx", rowNames = TRUE) 
-c_clusterStemVsTA_wil_filter <- read_excel("c_clusterStemVsTA_wil_filter.xlsx", col_names = TRUE)
-
-#only the up regulated gene
-#head(c_clusterStemVsTA_wil_filter)
-#c_clusterStemVsTA_wil_filter_up <- filter (c_clusterStemVsTA_wil_filter, avg_log2FC>0)%>%
-#  arrange(avg_log2FC)
-#write.xlsx(c_clusterStemVsTA_wil_filter_up, "c_clusterStemVsTA_wil_filter_up.xlsx", rownames=TRUE)
-
-
-#Roc
-c_clusterStemVsTA_roc<- FindMarkers(sc_subset_c, ident.1 = stem_cluster , ident.2 = TA_cluster , test.use="roc",
-                                    min.pct = 0.25, logfc.threshold = 0.25)
-head(c_clusterStemVsTA_roc)
-#in order to save it to excel with gene name.
-df <- as.data.frame.matrix(c_clusterStemVsTA_roc)
-head(df)
-
-#The gene names are actually stored as row names.generate new column with Gene name.
-df <- df %>% rownames_to_column(var = "Gene") # Move row names into a new column
-
-write.xlsx(df, file = "c_clusterStemVsTA_roc.xlsx", col_names = TRUE)
-
-#filter by myAUC
-c_clusterStemVsTA_roc <- read_excel("c_clusterStemVsTA_roc.xlsx",  col_names = TRUE)
-c_clusterStemVsTA_roc_filter <- filter (c_clusterStemVsTA_roc, myAUC>0.7)%>%
-  arrange(avg_log2FC)
-head(c_clusterStemVsTA_roc_filter) 
-write.xlsx(c_clusterStemVsTA_roc_filter, file="c_clusterStemVsTA_roc_filter.xlsx", rownames=T)
-
-
-#adding the column name with 'Gene', then read the file 
-c_clusterStemVsTA_wil_filter <- read_excel("c_clusterStemVsTA_wil_filter.xlsx",  col_names = TRUE)
-c_clusterStemVsTA_roc_filter <- read_excel("c_clusterStemVsTA_roc_filter.xlsx",  col_names = TRUE)
-avg_exp <- read_excel("c_avg_exp.xlsx",  col_names = TRUE)
-
- 
-#inner_join the two statistics test results from wilcoxin and roc 
-c_cluster12vsTA_wil_roc_join_filter <- inner_join(c_clusterStemVsTA_wil_filter, c_clusterStemVsTA_roc_filter, by="Gene")
-write.xlsx(c_cluster12vsTA_wil_roc_join_filter, file="c_cluster12vsTA_wil_roc_join_filter.xlsx", rownames=T)
-c_cluster12vsTA_wil_roc_join_filter <- read_excel("c_cluster12vsTA_wil_roc_join_filter.xlsx", col_names = TRUE)
-
-
-#inner_join the two statistics test results with the original average expression data
-c_cluster12vsTA_wil_roc_Aveexp <- avg_exp  %>%
-  inner_join(c_clusterStemVsTA_wil, by = "Gene")%>%
-  inner_join(c_clusterStemVsTA_roc, by = "Gene") 
-write.xlsx(c_cluster12vsTA_wil_roc_Aveexp, "c_cluster12vsTA_wil_roc_Aveexp.xlsx", rowNames=F)
-c_cluster12vsTA_wil_roc_Aveexp <- read_excel("c_cluster12vsTA_wil_roc_Aveexp.xlsx", col_names = TRUE)
-
-############################################
-# find all markers of cluster 12
-cluster12_markers_c1 <- FindMarkers(sc_subset_c, ident.1 = 12, test.use="wilcox", 
-                                      min.pct = 0.25, logfc.threshold = 0.25 ) #only.pos = TRUE,
-cluster12_markers_c1 <- filter (cluster12_markers_c1, p_val_adj<0.05)%>%
-  arrange(avg_log2FC)
-write.xlsx(cluster12_markers_c1, file = "c_cluster12_markers_wil.xlsx", rowNames=T)
-cluster12_markers_c1 <- read_excel("c_cluster12_markers_wil.xlsx",  col_names = TRUE)
-# find all markers of cluster 12
-cluster12_markers_c2 <- FindMarkers(sc_subset_c, ident.1 = 12, test.use="roc",
-                                      min.pct = 0.25, logfc.threshold = 0.25 ) #only.pos = TRUE,
-write.xlsx(cluster12_markers_c2, file = "c_cluster12_markers_roc.xlsx", rowNames=T)
-cluster12_markers_c2 <- read_excel("c_cluster12_markers_roc.xlsx",  col_names = TRUE)
-#innerjoin genes of cluster 12
-c_cluster12_wil_roc_join <- inner_join(cluster12_markers_c1, cluster12_markers_c2, by="Gene")
-write.xlsx(c_cluster12_wil_roc_join , file = "c_cluster12_wil_roc_join.xlsx",  rowNames=T)
-
+    ############################################
+    # find all markers of cluster 12
+    c_cluster12_wil <- FindMarkers(sc_subset_c, ident.1 = 12, test.use="wilcox", 
+                                          min.pct = 0.25, logfc.threshold = 0.25 ) #only.pos = TRUE,
+    #c_cluster12_wil_f <- c_cluster12_wil %>% filter (p_val_adj<0.05)%>%arrange(avg_log2FC)
+    write.xlsx(c_cluster12_wil, file = "c_cluster12_wil.xlsx", rowNames=T)
+    c_cluster12_wil <- read_excel("c_cluster12_wil.xlsx",  col_names = TRUE)
+    # find all markers of cluster 12
+    c_cluster12_roc <- FindMarkers(sc_subset_c, ident.1 = 12, test.use="roc",
+                                          min.pct = 0.25, logfc.threshold = 0.25 ) 
+    #c_cluster12_roc_f <- c_cluster12_roc %>% filter (p_val_adj<0.05)%>%arrange(avg_log2FC)
+    write.xlsx(c_cluster12_roc, file = "c_cluster12_roc.xlsx", rowNames=T)
+    c_cluster12_roc <- read_excel("c_cluster12_roc.xlsx",  col_names = TRUE)
+    #innerjoin genes of cluster 12
+    c_cluster12_wil_roc_join <- inner_join(c_cluster12_wil, c_cluster12_roc, by="Gene")
+    write.xlsx(c_cluster12_wil_roc_join , file = "c_cluster12_wil_roc_join.xlsx",  rowNames=T)
+    
+    c_cluster12_wil_roc_join_f<- c_cluster12_wil_roc_join%>% filter (p_val_adj<0.05)%>% filter (myAUC>0.7)%>%arrange(avg_log2FC.x)
+    write.xlsx(c_cluster12_wil_roc_join_f , file = "c_cluster12_wil_roc_join_f.xlsx",  rowNames=T)
+###################################################################################################
+# Strategy 3. find the DEGs of all cell containing EGFP (EGFP_bGhpolyA positive)
+###################################################################################################
+    # find all DEG markers based on EGFP-bGhpolyA expression
+    # Set the new cluster identities based on EGFP-bGhpolyA expression
+    # Add expression information for "EGFP-bGhpolyA"
+    sc_subset_c$EGFP_bGhpolyA_expr <- GetAssayData(object = sc_subset_c, assay = "RNA", slot = "counts")["EGFP-bGhpolyA", ] > 0
+    
+    Idents(sc_subset_c) <- sc_subset_c$EGFP_bGhpolyA_expr
+    # Perform DEA between cells expressing "EGFP-bGhpolyA" and those that do not
+    c_EGFP_wil <- FindMarkers(sc_subset_c, ident.1 = TRUE, ident.2 = FALSE,
+                                       min.pct = 0.25, logfc.threshold = 0.25, 
+                                      test.use="wilcox") #only.pos = TRUE,
+    c_EGFP_wil_df <- as.data.frame.matrix(c_EGFP_wil)
+    c_EGFP_wil_df <- c_EGFP_wil_df %>% rownames_to_column(var = "Gene")
+    #c_EGFP_wil_f <- c_EGFP_wil%>%filter(p_val_adj<0.05)%>%arrange(avg_log2FC)
+    # Save DEG results
+    #write.xlsx(c_EGFP_wil_df, file = "c_EGFP_wil.xlsx", rowNams=T)
+    #c_EGFP_wil <- read_excel("c_EGFP_wil.xlsx",  col_names = TRUE)
+    
+    # Set the new cluster identities based on EGFP-bGhpolyA expression
+    Idents(sc_subset_c) <- sc_subset_c$EGFP_bGhpolyA_expr
+    # Perform DEA between cells expressing "EGFP-bGhpolyA" and those that do not
+    c_EGFP_roc <- FindMarkers(sc_subset_c, ident.1 = TRUE, ident.2 = FALSE,
+                              min.pct = 0.25, logfc.threshold = 0.25, 
+                              test.use="roc") #only.pos = TRUE,
+    c_EGFP_roc_df <- as.data.frame.matrix(c_EGFP_roc)
+    c_EGFP_roc_df <- c_EGFP_roc_df %>% rownames_to_column(var = "Gene")
+    #c_EGFP_roc_f <- c_EGFP_roc%>%filter(myAUC>0.7)%>%arrange(avg_log2FC)
+    # Save DEG results
+    #write.xlsx(c_EGFP_roc_df, file = "c_EGFP_roc.xlsx", rowNams=T)
+    #c_EGFP_roc <- read_excel("c_EGFP_roc.xlsx",  col_names = TRUE)
+    
+    #innerjoin genes of cluster 12
+    c_EGFP_wil_roc_join <- inner_join(c_EGFP_wil_df, c_EGFP_roc_df, by="Gene")
+    write.xlsx(c_EGFP_wil_roc_join , file = "c_EGFP_wil_roc_join.xlsx",  rowNames=T)
+    
+    c_EGFP_wil_roc_join_f <- c_EGFP_wil_roc_join %>% filter (p_val_adj<0.05)%>% filter (myAUC>0.7)%>%arrange(avg_log2FC.x)
+    write.xlsx(c_EGFP_wil_roc_join_f , file = "c_EGFP_wil_roc_join_f.xlsx",  rowNames=T)
 
 #==================================================
 ### pathway 
 #==================================================
-
+    #filter by p_val_adj
+    #markers_c_filter <- markers_c %>% filter(p_val_adj < 0.05)
+    
 ##########################################################
 #pathway analysis 1: Metascape website
 ##########################################################
