@@ -536,6 +536,8 @@ dev.off()
     c_cluster12vsTA_wil_roc_join_filter <- read_excel("c_cluster12vsTA_wil_roc_join_filter.xlsx", col_names = TRUE)
     
     
+    
+    
     #inner_join the two statistics test results with the original average expression data
     c_cluster12vsTA_wil_roc_Aveexp <- avg_exp  %>%
       inner_join(c_clusterStemVsTA_wil, by = "Gene")%>%
