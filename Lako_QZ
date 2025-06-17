@@ -1,0 +1,94 @@
+library(Seurat)
+setwd("/Users/jackzhou/Desktop/Project_Sox9/scRNApaper_code/Lako/")
+counts = read.table("/Users/jackzhou/Desktop/Project_Sox9/scRNApaper_code/Lako/GSE155683_counts_adult_cornea.txt",sep=",",row.names=1,header=TRUE)
+#paper location: https://www.sciencedirect.com/science/article/pii/S1542012421000215?via%3Dihub
+
+counts <- as.matrix(counts)
+
+# Create Seurat object
+objAdata <- CreateSeuratObject(counts = counts, project = "MyProject")
+
+#--------------------------------------------------------------------------
+# Install R packages
+install.packages(c("Seurat","dplyr","topGo","tidyverse","org.Hs.eg.db","org.Mm.eg.db"))
+
+# load library
+library(Seurat)
+library(dplyr)
+library(Matrix)
+library(topGO)
+library(tidyverse)
+library(org.Hs.eg.db)
+
+gene_names <- rownames(objAdata)
+mt_genes <- grep("^MT-", gene_names, value = TRUE)
+length(mt_genes)
+head(mt_genes)
+
+###########################################################################################
+#QC and selecting cells for further analysis
+# calculate mt percentage
+objAdata[["percent.MT"]] <- PercentageFeatureSet(objAdata, pattern = "^MT-")
+#Review mc%
+summary(objAdata[["percent.MT"]])
+
+# make plots of the distribution of counts, genes, and mitochondrial expression
+png(filename = 'Lako_plot_mt.png')
+plot_mt <- VlnPlot(objAdata, features = c("nFeature_RNA","nCount_RNA","percent.MT"),pt.size=0.2)
+plot_mt
+dev.off()
+
+# make scatterplots of one value vs the other
+# number of UMI counts vs number of genes
+png(filename = 'Lako_plot1.png')
+plot1 <- FeatureScatter(objAdata, feature1="nCount_RNA",feature2="nFeature_RNA")
+plot1
+dev.off()  # Close the device to save the file
+# number of UMI counts vs % mitochondrial expression
+png(filename = 'Lako_plot2.png')
+plot2 <- FeatureScatter(objAdata, feature1="nCount_RNA",feature2="percent.MT")
+plot2
+dev.off()  # Close the device to save the file
+# number of genes vs % mitochondrial expression
+png(filename = 'Lako_plot3.png')
+plot3 <- FeatureScatter(objAdata, feature1="nFeature_RNA",feature2="percent.MT")
+plot3
+dev.off()  # Close the device to save the file
+plot1+plot2+plot3
+
+
+# Filter cells for downstream analysis
+objAdata <- subset(objAdata, subset = nFeature_RNA > 1000  & nCount_RNA>8000 & percent.MT < 25)
+######################################################
+
+
+
+# QC & normalization
+objAdata <-NormalizeData(objAdata)
+objAdata <-ScaleData(objAdata)
+
+objAdata <- FindVariableFeatures(objAdata,nfeatures=6000, selection.method = 'mvp') 
+#Centering and scaling data matrix;
+objAdata <- RunPCA(objAdata,features=VariableFeatures(object=objAdata),
+                      npcs = 50,verbose=F)
+# plots
+ElbowPlot(objAdata,ndims=24)
+DimHeatmap(objAdata,dims=1:24,cells=300,balanced=T)
+
+pca.dims1 <- 1:10
+objAdata <- FindNeighbors(objAdata, dims = pca.dims1)
+
+# run clutering, with resolution 
+objAdata <- FindClusters(objAdata, algorithm=2,  resolution=0.6)
+
+#tSNE
+objAdata <- RunTSNE(objAdata, dims=pca.dims1)
+DimPlot(objAdata, reduction='tsne', label=T)
+# size of clusters
+table(objAdata$seurat_clusters)
+# UMAP plot
+objAdata <- RunUMAP(objAdata, dims = pca.dims1)
+DimPlot(objAdata, reduction = "umap",label=TRUE, label.size = 10)
+
+
+

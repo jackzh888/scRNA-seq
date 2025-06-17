@@ -1,0 +1,729 @@
+setwd("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ")
+library( readxl)
+library(dplyr)
+#library("xlsx")
+library(openxlsx)
+#########################################################################################
+#inner joint between groups
+#########################################################################################
+all_innerjoin <- c_cluster12_wil_roc_join  %>%
+  inner_join(c_cluster12vsTA_wil_roc_join_filter, by = "Gene")%>%
+  
+#
+
+
+#########################################################################################
+#Homeostasis
+#########################################################################################
+
+c_AveEG <- read_excel("2005_summary_CorneaHomeostasis.xlsx", sheet =5, col_names = TRUE)
+
+c_LSCSvsTA_Dif <- read_excel("2005_summary_CorneaHomeostasis.xlsx", sheet =6, col_names = TRUE)
+c_12 <- read_excel("2005_summary_CorneaHomeostasis.xlsx", sheet =7, col_names = TRUE)
+c_egfp <- read_excel("2005_summary_CorneaHomeostasis.xlsx", sheet =8, col_names = TRUE)
+
+c_LSCSvsTA_Dif_auc <- read_excel("2005_summary_CorneaHomeostasis.xlsx", sheet =9, col_names = TRUE)
+c_12_auc <- read_excel("2005_summary_CorneaHomeostasis.xlsx", sheet =10, col_names = TRUE)
+c_egfp_auc <- read_excel("2005_summary_CorneaHomeostasis.xlsx", sheet =11, col_names = TRUE)
+
+#Gene_innerjoin  = inner_join(c_LSCSvsTA_Dif, c_12,c_egfp,  by = "Name")
+c_Gene_innerjoin_All <- c_AveEG  %>%
+  inner_join(c_LSCSvsTA_Dif, by = "Name")%>%
+  inner_join(c_12, by = "Name") %>% 
+  inner_join(c_egfp, by = "Name") %>%
+  inner_join(c_LSCSvsTA_Dif_auc, by = "Name")%>%
+  inner_join(c_12_auc, by = "Name")%>%
+  inner_join(c_egfp_auc, by = "Name")
+#
+write.xlsx(c_Gene_innerjoin_All, "c_Gene_innerjoin_All.xlsx", rowNames=F)
+
+c_Gene_innerjoin_All <- read_excel("c_Gene_innerjoin_All.xlsx", sheet=1, col_names = TRUE)
+
+
+
+
+####################################################################################################################
+#pathway selsection genes:
+  #to compare clusters, then generate DEG, select only the genes p_adj<0.05 
+  #to upload the innerjoin genes into website https://metascape.org/, 
+  #to select pathway relate to stem cells
+  #then choose the pathway related genes list and saved.(The gene name from the web is all capital)
+  #change the genes name to capital only the first (align with original genes name)
+  #then to inner the pathway related gene with the DEG 
+####################################################################################################################
+#convert all uppercase words in a text file to have only the first letter capitalized
+
+#1. Compare Lscs-egfp vs Dif&TA
+      #1.1 Read the file into a character vector (assuming one word/line per row)
+      text_data <- readLines("c_12vsTA_list pw2_homeostasis.txt")
+      
+      # Convert all uppercase to only the first letter capitalized
+      capitalized_text <- sapply(text_data, function(x) {
+        tools::toTitleCase(tolower(x)) # Convert lowercase, then capitalize
+      })
+      
+      # Write the modified text back to the file
+      writeLines(capitalized_text, "c_12vsTA_list pw2_homeostasis_updated.txt")
+      
+      #1.2 Innerjoin to include the DEG
+      c_12vsTA_pw_gene <- read.table(file = "c_12vsTA_list pw2_homeostasis_updated.txt", header = TRUE)
+      #c_LvsD_pw_gene <- read_excel("c_LvsD_list_pw.xlsx",col_names = TRUE)
+      c_12vsTA_pw2_homeostasis_DEG <- c_AveEG %>% inner_join( c_12vsTA_pw_gene, by='Name')  %>%
+                  inner_join( c_cluster12vsTA_wil_roc_join, by='Name')
+      #######################################
+      #1.3 another method to avoid 1.1 and 1.2: inner_join but without case sensitivity issues 
+      #######################################
+      #c_12vsTA_pw1_gene_DEG <- c_AveEG %>%
+       # mutate(Name = tolower(Name)) %>%
+        #inner_join(c_12vsTA_pw_gene %>% mutate(Name = tolower(Name)), by = 'Name') %>%
+        #inner_join(c_cluster12vsTA_wil_roc_join %>% mutate(Name = tolower(Name)), by = 'Name')
+      
+      write.xlsx(c_12vsTA_pw2_homeostasis_DEG, "c_12vsTA_pw2_homeostasis_gene_DEG.xlsx", rownames=F)
+      
+      #left join some function checked
+      c_12vsTA_pw2_homeostasis_DEG2 <- left_join(c_12vsTA_pw2_homeostasis_DEG, func, by = 'Name')
+      write.xlsx(c_12vsTA_pw2_homeostasis_DEG2, "c_12vsTA_pw2_homeostasis_DEG2.xlsx", rownames=F)
+
+      #pw1: corneal epithelial dif
+      c_12vsTA_pw1_gene_DEG2 <- read_excel("c_12vsTA_pw1_gene_DEG2.xlsx",col_names = TRUE)
+      #pw2: multicellular organismal-level homeostasis
+      c_12vsTA_pw2_homeostasis_DEG2<- read_excel("c_12vsTA_pw2_homeostasis_DEG2.xlsx",col_names = TRUE)
+      
+      c_12vsTA_pw1_2_homeostasis_DEG2 <- inner_join(c_12vsTA_pw1_gene_DEG2, c_12vsTA_pw2_homeostasis_DEG2, by="Name")
+      write.xlsx(c_12vsTA_pw1_2_homeostasis_DEG2, "c_12vsTA_pw1_2_homeostasis_DEG2.xlsx", rownames=F)
+      #innerjoin NGS
+      c_12vsTA_pw1_gene_DEG2_NGS <- inner_join(c_12vsTA_pw1_gene_DEG2, NGS, by = 'Name')
+        write.xlsx(c_12vsTA_pw1_gene_DEG2_NGS, "c_12vsTA_pw1_gene_DEG2_NGS.xlsx", rownames=F)
+      c_12vsTA_pw2_homeostasis_DEG2_NGS <- inner_join(c_12vsTA_pw2_homeostasis_DEG2, NGS, by = 'Name')
+        write.xlsx( c_12vsTA_pw2_homeostasis_DEG2_NGS, " c_12vsTA_pw2_homeostasis_DEG2_NGS.xlsx", rownames=F)
+        c_12vsTA_pw1_2_NGS <- inner_join( c_12vsTA_pw1_gene_DEG2_NGS,c_12vsTA_pw2_homeostasis_DEG2_NGS, by='Name')
+        write.xlsx(c_12vsTA_pw1_2_NGS ,"c_12vsTA_pw1_2_NGS.xlsx", rownames=F)
+        
+#2. Compare Lscs-egfp vs Dif&TA, 12, Egfp, then to keep all p<0.05, all Auc>0.7
+      #2.1 Read the file into a character vector (assuming one word/line per row)
+      # Ensure a final newline to prevent the warning
+      text_data <- readLines("c_all_list_pw.txt")
+      
+      # Convert all uppercase to only the first letter capitalized
+      capitalized_text <- sapply(text_data, function(x) {
+        tools::toTitleCase(tolower(x)) # Convert lowercase, then capitalize
+      })
+      
+      # Write the modified text back to the file
+      writeLines(capitalized_text, "c_all_list_pw_updated.txt")
+      
+      #2.2 Innerjoin to include the DEG
+      c_all_pw_gene <- read.table(file = "c_all_list_pw_updated.txt", header = TRUE)
+      #c_all_pw_gene <- read_excel("c_LvsD_list_pw.xlsx",col_names = TRUE)
+      c_all_pw_gene_DEG <- inner_join(c_all_pw_gene ,c_Gene_innerjoin_All, by='Name') 
+      write.xlsx(c_all_pw_gene_DEG, "c_all_pw_gene_DEG.xlsx", rownames=F)
+      
+#########################################################################################
+#join between the Homeostatis and NGS
+#########################################################################################
+      #imput the NGS sequencing results
+      NGS <- read_excel("2005_summary_CorneaHomeostasis.xlsx", sheet =14, col_names = TRUE)
+      c_LSCSvsDif_IPV <- read_excel("2005_summary_CorneaHomeostasis.xlsx", sheet =20, col_names = TRUE)
+      
+      c_LSCSvsDif_IPV_ngs <-  inner_join(c_LSCSvsDif_IPV, NGS,  by = "Name")
+      write.xlsx(c_LSCSvsDif_IPV_ngs, "c_LSCSvsDif_IPV_ngs.xlsx", rowNames=F)
+      
+      c_LSCSvsDif_IPV_ngs <- read_excel("2005_summary_CorneaHomeostasis.xlsx", sheet =22, col_names = TRUE)
+      c_LSCSvsDif_IPV_ngs_DEG <-  inner_join(c_LSCSvsDif_IPV_ngs, c_AveEG,  by = "Name")
+      write.xlsx(c_LSCSvsDif_IPV_ngs_DEG, "c_LSCSvsDif_IPV_ngs_DEG.xlsx", rowNames=F)
+
+      
+      
+
+
+#########################################################################################
+#Wound healing
+#########################################################################################
+
+wh_AveEG <- read_excel("2025_summary_WoundHealing.xlsx", sheet =5, col_names = TRUE)
+wh_LSCSvsTA_Dif <- read_excel("2025_summary_WoundHealing.xlsx", sheet =6, col_names = TRUE)
+wh_12 <- read_excel("2025_summary_WoundHealing.xlsx", sheet =7, col_names = TRUE)
+wh_egfp <- read_excel("2025_summary_WoundHealing.xlsx", sheet =8, col_names = TRUE)
+
+wh_LSCSvsTA_Dif_auc <- read_excel("2025_summary_WoundHealing.xlsx", sheet =9, col_names = TRUE)
+wh_12_auc <- read_excel("2025_summary_WoundHealing.xlsx", sheet =10, col_names = TRUE)
+wh_egfp_auc <- read_excel("2025_summary_WoundHealing.xlsx", sheet =11, col_names = TRUE)
+
+wh_Gene_innerjoin_LSCSvsDif  = inner_join(wh_LSCSvsTA_Dif, wh_LSCSvsTA_Dif_auc ,  by = "Name")
+write.xlsx(wh_Gene_innerjoin_LSCSvsDif, "wh_Gene_innerjoin_LSCSvsDif.xlsx", rowNames=F)
+
+wh_all_DEG <-wh_AveEG %>%
+  inner_join( wh_LSCSvsTA_Dif, by = "Name")%>%
+  inner_join(wh_12, by = "Name") %>% 
+  inner_join(wh_egfp, by = "Name") %>%
+  inner_join(wh_LSCSvsTA_Dif_auc, by = "Name")%>%
+  inner_join(wh_12_auc, by = "Name")%>%
+  inner_join(wh_egfp_auc, by = "Name")
+#  
+write.xlsx(wh_all_DRE, "wh_all_DEG.xlsx", rowNames=F)
+
+wh_all_DRE <- read_excel("wh_all_DEG.xlsx", sheet=1, col_names = TRUE)
+
+wh_cluster12vsTA_wilcox <- read.csv("wh_cluster12vsTA_wilcox.csv", header = TRUE)
+
+
+
+
+####################################################################################################################
+#pathway selsection genes:
+  #to compare clusters, then generate DEG, select only the genes p_adj<0.05 
+  #to upload the innerjoin genes into website https://metascape.org/, 
+  #to select pathway relate to stem cells
+  #then choose the pathway related genes list and saved.(The gene name from the web is all capital)
+  #change the genes name to capital only the first (align with original genes name)
+  #then to inner the pathway related gene with the DEG 
+####################################################################################################################
+#convert all uppercase words in a text file to have only the first letter capitalized
+
+#1. Compare Lscs-egfp vs Dif&TA
+#1.1 Read the file into a character vector (assuming one word/line per row)
+text_data <- readLines("wh_12vsTA_list pw2.txt")
+
+# Convert all uppercase to only the first letter capitalized
+capitalized_text <- sapply(text_data, function(x) {
+  tools::toTitleCase(tolower(x)) # Convert lowercase, then capitalize
+})
+
+# Write the modified text back to the file
+writeLines(capitalized_text, "wh_12vsTA_list_pw2_updated.txt")
+
+#1.2 Innerjoin to include the DEG
+wh_12vsTA_pw1_gene <- read.table(file = "wh_12vsTA_list_pw1_updated.txt", header = TRUE)
+wh_12vsTA_pw2_gene <- read.table(file = "wh_12vsTA_list_pw2_updated.txt", header = TRUE)
+wh_12vsTA_pw_full <- full_join(wh_12vsTA_pw1_gene, wh_12vsTA_pw2_gene, , by='Name')
+
+#wh_LvsD_pw_gene <- read_excel("wh_LvsD_list_pw.xlsx",col_names = TRUE)
+#wh_LvsD_pw_gene_DEG <- inner_join(wh_LvsD_pw_full , wh_cluster12vsTA_wil_roc_join, by='Name') 
+
+wh_cluster12vsTA_wil_roc_join <- read_excel("c_cluster12vsTA_wil_roc_join.xlsx", col_names = TRUE )
+
+wh_LvsTA_pw1_gene_DEG  <-wh_AveEG %>%
+  inner_join(wh_12vsTA_pw1_gene, by="Name") %>%
+  inner_join(wh_cluster12vsTA_wil_roc_join, by="Name") 
+wh_LvsTA_pw1_gene_DEG2 <- left_join(wh_LvsTA_pw1_gene_DEG, func, by="Name")
+write.xlsx(wh_LvsTA_pw1_gene_DEG2, "wh_LvsTA_pw1_gene_DEG2.xlsx", rownames=F)
+
+wh_LvsTA_pw2_gene_DEG  <-wh_AveEG %>%
+  inner_join(wh_12vsTA_pw2_gene, by="Name") %>%
+  inner_join(wh_cluster12vsTA_wil_roc_join, by="Name") 
+wh_LvsTA_pw2_gene_DEG2 <- left_join(wh_LvsTA_pw2_gene_DEG, func, by="Name")
+write.xlsx(wh_LvsTA_pw2_gene_DEG2, "wh_LvsTA_pw2_gene_DEG2.xlsx", rownames=F)
+
+wh_LvsTA_pw1_2_gene_DEG <- inner_join(wh_LvsTA_pw1_gene_DEG2, wh_LvsTA_pw2_gene_DEG2, by = "Name")
+write.xlsx(wh_LvsTA_pw1_2_gene_DEG, "wh_LvsTA_pw1_2_gene_DEG.xlsx", rownames=F)
+
+
+
+
+
+#2. Compare Lscs-egfp vs Dif&TA, 12, Egfp, then to keep all p<0.05, all Auc>0.7
+#save these genes to new txt file, and name it with: wh_all_list_forIPV.txt
+#to upload this file to web, then generation IPV
+#to choose the pathway interested and selected the related genes
+#tranfer these genes by data function in xlsx to a list, 
+# then save this gene list to file "wh_allDEG_list_pw.txt" 
+#(Because all gene is capital, which should be edit to capital with only first letter)
+
+#2.1 Read the file into a character vector (assuming one word/line per row)
+# Ensure a final newline to prevent the warning
+text_data <- readLines("wh_allDEG_list_pw.txt")
+
+# Convert all uppercase to only the first letter capitalized
+capitalized_text <- sapply(text_data, function(x) {
+  tools::toTitleCase(tolower(x)) # Convert lowercase, then capitalize
+})
+
+# Write the modified text back to the file
+writeLines(capitalized_text, "wh_allDEG_list_pw_updated.txt")
+
+#2.2 Innerjoin to include the DEG
+wh_allDEG_pw_gene <- read.table(file = "wh_allDEG_list_pw_updated.txt", header = TRUE)
+#wh_all_pw_gene <- read_excel("wh_LvsD_list_pw.xlsx",col_names = TRUE)
+wh_all_pw_gene_DEG <- inner_join(wh_all_pw_gene ,wh_all_DEG, by='Name') 
+write.xlsx(wh_all_pw_gene_DEG, "wh_all_pw_gene_DEG.xlsx", rownames=F)
+
+
+
+
+#########################################################################################
+#join between the Homeostatis and Wound healing
+#########################################################################################
+
+    #Gene_innerjoin_cwh <- inner_join(c_Gene_innerjoin_c_ngs, wh_Gene_innerjoin,  by = "Name")
+    #write.xlsx(Gene_innerjoin_cwh, "c_Gene_innerjoin_cwh.xlsx", rowNames=F)
+    #Gene_innerjoin_cwh <- read_excel( "c_Gene_innerjoin_cwh.xlsx",col_names = TRUE)
+    
+    #write.xlsx(Gene_innerjoin_cwh_ngs, "Gene_innerjoin_cwh_ngs.xlsx", rowNames=F)
+
+c_12vD_IPV_NGS <- read_excel("2025_Homeostasis_WoundHealing_Innerjoin.xlsx", sheet=1, col_names = TRUE)
+c_all_DEG_IPV <- read_excel("2025_Homeostasis_WoundHealing_Innerjoin.xlsx", sheet=2, col_names = TRUE)
+wh_12vD_IPV <- read_excel("2025_Homeostasis_WoundHealing_Innerjoin.xlsx", sheet=3, col_names = TRUE)
+wh_all_DEG_IPV <- read_excel("2025_Homeostasis_WoundHealing_Innerjoin.xlsx", sheet=4, col_names = TRUE)
+
+c_wh_all_DEG_IPV <-c_12vD_IPV_NGS%>%
+  inner_join( c_all_DEG_IPV, by = "Name")%>%
+  inner_join(wh_12vD_IPV , by = "Name") %>% 
+  inner_join(wh_all_DEG_IPV, by = "Name")
+#  
+write.xlsx(c_wh_all_DEG_IPV, "c_wh_all_DEG_IPV.xlsx", rowNames=F)
+
+
+#########################################################################################
+##function
+#########################################################################################
+
+func<- read_excel("genes_function.xlsx", sheet =1, col_names = TRUE)
+write.xlsx(func, "genes_function.xlsx",  sheet =1, rowNames=F)
+
+#########################################################################################
+##12vs TA pw decision
+#########################################################################################
+DEG_pw_fun_c1<- read_excel("12vTA_DEG_pw_join.xlsx", sheet =1, col_names = TRUE)
+DEG_pw_fun_c2<- read_excel("12vTA_DEG_pw_join.xlsx", sheet =2, col_names = TRUE)
+DEG_pw_fun_c3<- read_excel("12vTA_DEG_pw_join.xlsx", sheet =3, col_names = TRUE)
+DEG_pw_fun_c4<- read_excel("12vTA_DEG_pw_join.xlsx", sheet =4, col_names = TRUE)
+DEG_pw_fun_c5<- read_excel("12vTA_DEG_pw_join.xlsx", sheet =5, col_names = TRUE)
+DEG_pw_fun_c6<- read_excel("12vTA_DEG_pw_join.xlsx", sheet =6, col_names = TRUE)
+DEG_pw_fun_wh1<- read_excel("12vTA_DEG_pw_join.xlsx", sheet =7, col_names = TRUE)
+DEG_pw_fun_wh2<- read_excel("12vTA_DEG_pw_join.xlsx", sheet =8, col_names = TRUE)
+DEG_pw_fun_wh3<- read_excel("12vTA_DEG_pw_join.xlsx", sheet =9, col_names = TRUE)
+DEG_pw_fun_c_wh <- DEG_pw_fun_c1 %>% full_join(DEG_pw_fun_c2, by = "Name")%>% 
+  full_join(DEG_pw_fun_c3, by = "Name")%>% full_join(DEG_pw_fun_c4, by = "Name")%>% full_join(DEG_pw_fun_c5, by = "Name")%>% 
+  full_join(DEG_pw_fun_c6, by = "Name")%>% full_join(DEG_pw_fun_wh1, by = "Name")%>% full_join(DEG_pw_fun_wh2, by = "Name")%>% 
+  full_join(DEG_pw_fun_wh3, by = "Name")
+
+write.xlsx(DEG_pw_fun_c_wh, "DEG_pw_fun_c_wh.xlsx",  sheet =1, rowNames=F)
+
+
+
+
+#===============================================================================
+### 2025.3.8 the overlap genes between the GSEA and Wilcoxon and Roc test
+#===============================================================================
+#read the pathway gene list
+GSEA_pathway1 <- read_excel("c_GSEA_results_selected.xlsx", sheet=3, col_names = TRUE)
+GSEA_pathway2 <- read_excel("c_GSEA_results_selected.xlsx", sheet=4, col_names = TRUE)
+GSEA_pathway3 <- read_excel("c_GSEA_results_selected.xlsx", sheet=5, col_names = TRUE)
+GSEA_pathway4 <- read_excel("c_GSEA_results_selected.xlsx", sheet=6, col_names = TRUE)
+GSEA_pathway5 <- read_excel("c_GSEA_results_selected.xlsx", sheet=7, col_names = TRUE)
+GSEA_pathway6 <- read_excel("c_GSEA_results_selected.xlsx", sheet=8, col_names = TRUE)
+GSEA_pathway7 <- read_excel("c_GSEA_results_selected.xlsx", sheet=9, col_names = TRUE)
+GSEA_pathway8 <- read_excel("c_GSEA_results_selected.xlsx", sheet=10, col_names = TRUE)
+
+#Read the DEG comparation result
+c_cluster12vsTA_wil_roc_Aveexp<- read_excel("c_cluster12vsTA_wil_roc_Aveexp.xlsx", sheet=1, col_names = TRUE)
+
+
+#metascape
+#read metascape pathway results
+c_12vsTA_list_pw1<- read_excel("MetaScape_wil_filtered_up_pw.xlsx", sheet =2, col_names = TRUE)
+c_12vsTA_list_pw2 <- read_excel("MetaScape_wil_filtered_up_pw.xlsx", sheet =3, col_names = TRUE)
+wh_12vsTA_list_pw1<- read_excel("MetaScape_wil_filtered_up_pw.xlsx", sheet =4, col_names = TRUE)
+wh_12vsTA_list_pw2 <- read_excel("MetaScape_wil_filtered_up_pw.xlsx", sheet =5, col_names = TRUE)
+wh_12vsTA_list_pw3 <- read_excel("MetaScape_wil_filtered_up_pw.xlsx", sheet =6, col_names = TRUE)
+
+# Trim spaces and capitalize first letter only
+c_12vsTA_list_pw1 <- c_12vsTA_list_pw1 %>%
+  mutate(Gene = str_to_title(str_trim(Gene)))
+
+library(dplyr)
+library(stringr)
+
+# Correcting the code
+c_12vsTA_list_pw1$Gene <- str_to_title(str_trim(c_12vsTA_list_pw1$Gene))
+c_12vsTA_list_pw2$Gene <- str_to_title(str_trim(c_12vsTA_list_pw2$Gene))
+wh_12vsTA_list_pw1$Gene <- str_to_title(str_trim(wh_12vsTA_list_pw1$Gene))
+wh_12vsTA_list_pw2$Gene <- str_to_title(str_trim(wh_12vsTA_list_pw2$Gene))
+wh_12vsTA_list_pw3$Gene <- str_to_title(str_trim(wh_12vsTA_list_pw3$Gene))
+
+pw1 <- c_12vsTA_list_pw1
+pw2 <- c_12vsTA_list_pw2
+pw3 <- wh_12vsTA_list_pw1
+pw4 <- wh_12vsTA_list_pw2
+pw5 <- wh_12vsTA_list_pw3
+
+#Read data
+c_avg_exp <- read_excel("c_avg_exp.xlsx", sheet =1, col_names = TRUE)
+wh_avg_exp <- read.csv("wh_avg_exp.csv")
+NGS <- read_excel("NGS_RNAseq.xlsx", sheet =1, col_names = TRUE)
+c_clusterStemVsTA_wil_filter_up<- read_excel("c_clusterStemVsTA_wil_filter_up.xlsx", sheet =1, col_names = TRUE)
+wh_clusterStemVsTA_wil_filter_up<- read_excel("wh_cluster12vsTA_wilcox_filter_up.xlsx", sheet =1, col_names = TRUE)
+
+wh_avg_exp$Gene <- wh_avg_exp$X
+head(wh_avg_exp)
+
+#innerjoin
+pw_gene <- pw2 %>% inner_join(pw5, by = "Gene")%>% 
+  inner_join(c_avg_exp, by = "Gene")%>% inner_join(wh_avg_exp, by = "Gene")%>% 
+  inner_join(c_clusterStemVsTA_wil_filter_up, by = "Gene")%>% inner_join(wh_clusterStemVsTA_wil_filter_up, by = "Gene")
+write.xlsx(pw_gene, "wil_up_pw2v5.xlsx",  sheet =1, rowGenes=F)
+
+
+
+
+
+
+
+
+
+
+
+#merge with the LSCS vs TA resultf of Wiloxon and Roc
+head(wh_12vsTA_list_pw1_updated)
+
+GSEA_12vsTA_AveExp_Meta_NGS <- c_cluster12vsTA_wil_roc_Aveexp %>% 
+  full_join(GSEA_pathway1, by = "Gene")%>% full_join(GSEA_pathway2, by = "Gene")%>% full_join(GSEA_pathway3, by = "Gene")%>% 
+  full_join(GSEA_pathway4, by = "Gene")%>% full_join(GSEA_pathway5, by = "Gene")%>% full_join(GSEA_pathway6, by = "Gene")%>% 
+  full_join(GSEA_pathway7, by = "Gene")%>% full_join(GSEA_pathway8, by = "Gene")%>% 
+  full_join(c_12vsTA_list_pw1 , by = "Gene")%>% full_join(c_12vsTA_list_pw2, by = "Gene")%>% 
+  full_join(wh_12vsTA_list_pw1, by = "Gene")%>% full_join(wh_12vsTA_list_pw2, by = "Gene")%>% 
+  full_join(NGS, by = "Gene")
+
+write.xlsx(GSEA_12vsTA_AveExp_Meta_NGS, "GSEA_12vsTA_AveExp_Meta_NGS.xlsx",  sheet =1, rowGenes=F)
+
+#########################
+#generate a Venn diagram 
+#########################
+
+
+#Using the ggVennDiagram Package
+#install.packages("ggVennDiagram")
+library(ggVennDiagram)
+
+
+set1 <- c_clusterStemVsTA_wil_filter$Gene 
+set2 <- c_clusterStemVsTA_roc_filter$Gene 
+c_pw1 <- read_excel("Metascape_pw_all.xlsx", sheet=2, col_names = T)
+c_pw1 <- c_pw1$Gene
+c_pw2 <- read_excel("Metascape_pw_all.xlsx", sheet=1, col_names = T)
+c_pw2 <- c_pw2$Gene
+set3 <- cluster12_markers_wh1$Gene 
+set4 <- cluster12_markers_wh2$Gene 
+wh_pw1 <- read_excel("Metascape_pw_all.xlsx", sheet=4, col_names = T)
+wh_pw1 <- wh_pw1$Gene
+wh_pw2 <- read_excel("Metascape_pw_all.xlsx", sheet=3, col_names = T)
+wh_pw2 <- wh_pw2$Gene
+
+
+# Simulated example data
+my_data <- list(
+  "H-Wil" = set1,
+  "H-AUC" = set2,
+  "H-Pw1" =  c_pw1,
+  "H-Pw2" = c_pw2
+)
+
+# Create Venn diagram plot
+venn_plot <- ggVennDiagram(my_data, label_alpha = 0) +
+  scale_fill_gradient(low = "lightblue", high = "red") +
+  theme_minimal()
+
+# Create bottom annotation as a separate plot
+annotation_text <- paste(
+  "H-Wil: Homeostasis:Wilcoxon Sum Rank Test",
+  "H-AUC: Homeostasis:ROC Analysis",
+  "H-Pw1: Homeostasis:Epithelial cell differentiation",
+  "H-Pw2: Homeostasis:Multicellular organismal-level homeostasis",
+  sep = "\n"
+)
+
+annotation_plot <- ggplot() +
+  annotate("text", x = 0.3, y = 0.3, label = annotation_text, size = 3, hjust = 0) +
+  theme_void()
+
+# Combine with patchwork
+final_plot <- venn_plot / annotation_plot + plot_layout(heights = c(1, 1))
+
+# Save the plot
+ggsave("c_venn_with_annotation_bottom1.png", final_plot, width = 8, height = 10, dpi = 150)
+
+
+#Venn diagram with annotation in the bottom
+library(ggVennDiagram)
+library(ggplot2)
+library(patchwork)
+
+# Simulated example data
+my_data <- list(
+  "WH-Wil" = set3,
+  "WH-AUC" = set4,
+  "WH-Pw1" =  wh_pw1,
+  "WH-Pw2" = wh_pw2
+)
+
+# Create Venn diagram plot
+venn_plot <- ggVennDiagram(my_data, label_alpha = 0) +
+  scale_fill_gradient(low = "lightblue", high = "red") +
+  theme_minimal()
+
+# Create bottom annotation as a separate plot
+annotation_text <- paste(
+  "WH-Wil: Wound Healing:Wilcoxon Sum Rank Test",
+  "WH-AUC: Wound Healing:ROC Analysis",
+  "WH-Pw1: Wound Healing:Epithelial cell differentiation",
+  "WH-Pw2: Wound Healing:Multicellular organismal-level homeostasis",
+  sep = "\n"
+)
+
+annotation_plot <- ggplot() +
+  annotate("text", x = 0.3, y = 0.3, label = annotation_text, size = 3, hjust = 0) +
+  theme_void()
+
+# Combine with patchwork
+final_plot <- venn_plot / annotation_plot + plot_layout(heights = c(1, 1))
+
+# Save the plot
+ggsave("wh_venn_with_annotation_bottom2.png", final_plot, width = 8, height = 10, dpi = 150)
+
+####both homeostasis and wound healing Venn diagram with annotation in the bottom
+# data 1
+my_data <- list(set1, set2,set3, set4)
+my_data <- list(
+  "H-Wil" = set1,
+  "H-AUC" = set2,
+  "WH-Wil" = set3,
+  "WH-AUC" = set4
+)
+
+# Create Venn diagram plot
+venn_plot <- ggVennDiagram(my_data, label_alpha = 0) +
+  scale_fill_gradient(low = "lightblue", high = "red") +
+  theme_minimal()
+
+# Create bottom annotation as a separate plot
+annotation_text <- paste(
+  "H-Wil: Homeostasis: Wilcoxon Sum Rank Test",
+  "H-AUC: Homeostasis: ROC Analysis",
+  "WH-Wil: Wound Healing: Wilcoxon Sum Rank Test",
+  "WH-AUC: Wound Healing: ROC Analysis",
+  sep = "\n"
+)
+
+annotation_plot <- ggplot() +
+  annotate("text", x = 0.3, y = 0.3, label = annotation_text, size = 3, hjust = 0) +
+  theme_void()
+
+# Combine with patchwork
+final_plot <- venn_plot / annotation_plot + plot_layout(heights = c(1, 1))
+
+# Save the plot
+ggsave("venn_with_annotation_bottom3.png", final_plot, width = 8, height = 10, dpi = 150)
+
+#########################################
+# data 2
+my_data <- list(  c_pw1,c_pw2,   wh_pw1,wh_pw2)
+my_data <- list(
+  "H-Pw1" =  c_pw1,
+  "H-Pw2" = c_pw2,
+  "WH-Pw1" =  wh_pw1,
+  "WH-Pw2" = wh_pw2
+)
+
+# Create Venn diagram plot
+venn_plot <- ggVennDiagram(my_data, label_alpha = 0) +
+  scale_fill_gradient(low = "lightblue", high = "red") +
+  theme_minimal()
+
+# Create bottom annotation as a separate plot
+annotation_text <- paste(
+  "H-Pw1: Homeostasis: Epithelial cell differentiation",
+  "H-Pw2: Homeostasis: Multicellular organismal-level homeostasis",
+  "WH-Pw1: Wound Healing: Epithelial cell differentiation",
+  "WH-Pw2: Wound Healing: Multicellular organismal-level homeostasis",
+  sep = "\n"
+)
+
+annotation_plot <- ggplot() +
+  annotate("text", x = 0.3, y = 0.3, label = annotation_text, size = 3, hjust = 0) +
+  theme_void()
+
+# Combine with patchwork
+final_plot <- venn_plot / annotation_plot + plot_layout(heights = c(1, 1))
+
+# Save the plot
+ggsave("venn_with_annotation_bottom4.png", final_plot, width = 8, height = 10, dpi = 150)
+
+
+
+
+##################################################
+#metascape analysis result
+c_wil_filtered_up_tf <- read_excel("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/MetaScape/c_wh_wil_filtered_upregulated_summary.xlsx", col_names = TRUE, sheet =1 )
+c_wil_filtered_up_tg <- read_excel("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/MetaScape/c_wh_wil_filtered_upregulated_summary.xlsx", col_names = TRUE, sheet =2 )
+wh_wil_filtered_up_tf <- read_excel("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/MetaScape/c_wh_wil_filtered_upregulated_summary.xlsx", col_names = TRUE, sheet =3 )
+wh_wil_filtered_up_tg <- read_excel("/Users/jackzhou/Desktop/Project_Sox9/sox9_bioinfo_QZ/MetaScape/c_wh_wil_filtered_upregulated_summary.xlsx", col_names = TRUE, sheet =4 )
+
+c_wil_filtered_up_tf <- select(c_wil_filtered_up_tf, Gene)
+c_wil_filtered_up_tg <- select(c_wil_filtered_up_tg, Gene)
+wh_wil_filtered_up_tf <- select(wh_wil_filtered_up_tf, Gene)
+wh_wil_filtered_up_tg <- select(wh_wil_filtered_up_tg, Gene)
+
+tf <- inner_join(c_wil_filtered_up_tf,wh_wil_filtered_up_tf, by="Gene") 
+tg <- inner_join (c_wil_filtered_up_tg,wh_wil_filtered_up_tg, by="Gene")
+head(tf)
+
+#capitalize only the first letter of each gene symbol while keeping the rest in lowercase
+library(dplyr)
+library(stringr)
+# Capitalize first letter only
+tf <- wh_wil_filtered_up_tf %>%
+  mutate(Gene = str_to_title(str_trim(Gene)))
+head(tf)
+tg <- wh_wil_filtered_up_tg %>%
+  mutate(Gene = str_to_title(str_trim(Gene)))
+head(tg)
+
+#to observe the innerjoin gene expression in samples
+tf_c <- inner_join(tf, c_clusterStemVsTA_wil_filter_up, by="Gene" ) 
+head(tf_c)
+tg_c <- inner_join(tg, c_clusterStemVsTA_wil_filter_up, by="Gene" ) 
+head(tg_c)
+
+tf_wh <- inner_join(tf, wh_cluster12vsTA_wilcox, by="Gene" ) 
+head(tf_wh)
+tg_wh <- inner_join(tg, wh_cluster12vsTA_wilcox_filter_up, by="Gene" ) 
+head(tg_wh)
+
+
+######################################################
+
+#check CC by dotplot
+features <- c( )
+png(filename="c_dot_CC.png")
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Conjunctival Cell Marker") 
+dev.off()
+
+
+
+############################################################################################################
+
+
+############################################################################################################
+# candidate genes using dotplot
+features <- c('Krt18', 'Krt8', 'Fmo1','Fmo2','Gabrp','Anxa3','Alcam')
+# Create a custom mapping of feature names for visualization
+custom_labels <- setNames(c('Krt18', 'Krt8', 'Fmo1','Fmo2','Gabrp','Anxa3','Alcam'),
+                          features)
+# Custom cluster labels for 13 clusters (0 to 12)
+custom_cluster_labels <- c(
+  '0' = 'BC',
+  '1' = 'TD',
+  '2' = 'TD',
+  '3' = 'TD',
+  '4' = 'UC',
+  '5' = 'TA',
+  '6' = 'BC',
+  '7' = 'TA',
+  '8' = 'Conj',
+  '9' = 'LSC',
+  '10' = 'BC',
+  '11' = 'PC',
+  '12' = 'LSC'
+)
+
+# Plot with custom x-axis labels (clusters)
+png(filename = "c_dot_candidate1.png", width = 500, height = 400)
+DotPlot(sc_subset_c, features = features) +
+  RotatedAxis() +
+  ggtitle("Candidate Cell Marker") +
+  scale_x_discrete(labels = custom_labels) +  # Change cluster labels on X
+  scale_y_discrete(labels = custom_cluster_labels) +  # Change cluster labels on y
+  scale_color_gradientn(colors = c("blue", "white", "red"))  # Expression gradient
+dev.off()
+############################################################################################################
+## candidate in wound healing
+############################################################################################################
+
+features <- c('Krt18', 'Krt8', 'Fmo1','Fmo2','Gabrp','Anxa3','Alcam')
+# Create a custom mapping of feature names for visualization
+custom_labels <- setNames(c('Krt18', 'Krt8', 'Fmo1','Fmo2','Gabrp','Anxa3','Alcam'),
+                          features)
+# Custom cluster labels for 13 clusters (0 to 12)
+custom_cluster_labels <- c(
+  '0' = 'BC',
+  '1' = 'TA',
+  '2' = 'TA',
+  '3' = 'TD',
+  '4' = 'TA',
+  '5' = 'TD',
+  '6' = 'UC',
+  '7' = 'Conj',
+  '8' = 'BC',
+  '9' = 'UC',
+  '10' = 'PC',
+  '11' = 'LSC',
+  '12' = 'LSC'
+)
+
+# Plot with custom x-axis labels (clusters)
+png(filename = "wh_dot_candidate1.png", width = 500, height = 400)
+DotPlot(sc_subset_wh, features = features) +
+  RotatedAxis() +
+  ggtitle("Candidate Cell Marker") +
+  scale_x_discrete(labels = custom_labels) +  # Change cluster labels on X
+  scale_y_discrete(labels = custom_cluster_labels) +  # Change cluster labels on y
+  scale_color_gradientn(colors = c("blue", "white", "red"))  # Expression gradient
+dev.off()
+
+##########################################################################################################################################
+
+#Differential expression with respect to clusters
+Idents(sc_subset_c) <- "seurat_clusters" 
+markers_c <- FindAllMarkers(sc_subset_c, test.use="wil", min.pct = 0.25, only.pos = TRUE, logfc.threshold = 0.25) #only.pos = TRUE,
+c_markers_roc <- FindAllMarkers(sc_subset_c, test.use="roc", min.pct = 0.25, only.pos = TRUE, logfc.threshold = 0.25) #only.pos = TRUE,
+
+# Step 4: Merge the Wilcoxon and ROC results
+# Create a common key to match
+markers_c$key <- paste0(markers_c$gene, "_", markers_c$cluster)
+c_markers_roc$key <- paste0(c_markers_roc$gene, "_", c_markers_roc$cluster)
+
+# Merge AUC values into Wilcoxon results
+markers_merged <- merge(
+  markers_c,
+  c_markers_roc[, c("key", "myAUC")],
+  by = "key",
+  all.x = TRUE
+)
+
+# Step 5: Filter by adjusted p-value threshold (example: adj p < 0.05)
+sig_markers <- markers_merged %>%
+  filter(p_val_adj < 0.05)
+
+# Step 6: Sort within each cluster by AUC
+sig_markers_sorted <- sig_markers %>%
+  group_by(cluster) %>%
+  arrange(desc(myAUC), .by_group = TRUE)
+
+# Step 7: Select top 10 genes per cluster based on AUC
+top10_markers <- sig_markers_sorted %>%
+  group_by(cluster) %>%
+  slice_max(order_by = myAUC, n = 10, with_ties = FALSE)
+
+
+# Step 8: View or save the final top markers
+head(top10_markers)
+# Optional: Save results
+write.xlsx(top10_markers, "Top10_Markers_Per_Cluster_SortedByAUC.xlsx", rowNames = F)
+
+#Heatmap of top genes for all clusters
+png(filename = "top_wil_roc_clusters_heatmap_c.png", width = 1200, height = 1000)
+DoHeatmap(sc_subset_c, features = top10_markers$gene) +
+  ggtitle("Corneal Homeostasis Top Genes") +
+  scale_fill_gradientn(colors = c("blue", "white", "red"))  # Blue to red scale
+
+dev.off()
+
+top_wil_roc_c12 <- sig_markers_sorted %>%
+  filter(cluster == 12) %>%   # First, filter only cluster 12
+  top_n(n = 10, wt = myAUC)   # Then select the top 100 based on myAUC
+write.xlsx(top_wil_roc_c12,"top_wil_roc_c12.xlsx", rowNames=F)
+
+
+
+

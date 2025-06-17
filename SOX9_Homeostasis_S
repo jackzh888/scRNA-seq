@@ -1,0 +1,1893 @@
+#SOX9scRNAseq_QZ_3c2 suppliment
+
+
+
+###################################################################################################
+#supplement code
+###################################################################################################
+
+#find the DEG in all clusters
+wilcox_stats_c <- FindAllMarkers(sc_subset_c, test.use="wilcox",group.by="seurat_clusters",
+                                 only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, )  
+write.csv(wilcox_stats_c, file = "c_wilcox_stats.csv")
+
+Idents(sc_subset_c) <- "seurat_clusters" 
+roc_c <- FindAllMarkers(sc_subset_c, test.use="roc", group.by="seurat_clusters",
+                        only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, )
+write.csv(roc_c, file = "c_roc.csv")
+#roc_c <- read.csv(file = "roc_c2025.csv")
+# number of genes with AUC>0.7 for each cluster
+roc8_c <- table(roc_c[roc_c$myAUC>0.8,"cluster"])
+write.csv(roc8_c, file = "c_roc8.csv")
+
+
+# find all DEG markers of cluster 12
+cluster12_markers_c <- FindMarkers(sc_subset_c, test.use="wilcox", ident.1 = 12, 
+                                   only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, )
+write.csv(cluster12_markers_c , file = "c_cluster12_markers.csv")
+# find all markers of cluster 12
+cluster12_roc_c <- FindMarkers(sc_subset_c, test.use="roc", ident.1 = 12, 
+                               only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, )
+write.csv(cluster12_roc_c , file = "c_cluster12_markers_roc.csv")
+
+#################################
+# find all DEG markers based on EGFP-bGhpolyA expression
+# Set the new cluster identities based on EGFP-bGhpolyA expression
+Idents(sc_subset_c) <- sc_subset_c$EGFP_bGhpolyA_expr
+# Perform DEA between cells expressing "EGFP-bGhpolyA" and those that do not
+deg_results_EGFP_c <- FindMarkers(sc_subset_c, ident.1 = TRUE, ident.2 = FALSE,
+                                  only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, 
+                                  test.use="wilcox")
+# Save DEG results
+write.csv(deg_results_EGFP_c, file = "c_DEG_EGFP_bGhpolyA_vs_Other.csv", row.names = TRUE)
+# Set the new cluster identities based on EGFP-bGhpolyA expression
+Idents(sc_subset_c) <- sc_subset_c$EGFP_bGhpolyA_expr
+# Perform DEA between cells expressing "EGFP-bGhpolyA" and those that do not
+deg_roc_EGFP_c <- FindMarkers(sc_subset_c, ident.1 = TRUE, ident.2 = FALSE,
+                              only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, 
+                              test.use="roc")
+# Save DEG results
+write.csv(deg_roc_EGFP_c, file = "c_DEG_EGFP_vs_Other_roc.csv", row.names = TRUE)
+
+#######################################
+# get top 10 genes for cluster 12
+cluster12_c = roc_c[roc_c$cluster==12,]
+cluster12_top5_c <- head(cluster12_c[order(cluster12_c[,1],decreasing=T),],5)
+# getting top 10 genes for all clusters
+library(dplyr)
+top10_c <- roc_c %>% group_by(cluster) %>% top_n(n=10, wt=myAUC)
+top10_c
+
+
+#count original EGFP cells 
+
+# Joining layers if they're not integrated
+#important for SeuratObject 5.0.0. 
+seurat_c<- JoinLayers(seurat_c, features = rownames(seurat_ccluster), assay = 'RNA') # Or another relevant assay
+
+# Add expression information for "EGFP-bGhpolyA"
+seurat_c$EGFP_bGhpolyA_expr <- GetAssayData(object = seurat_c, assay = "RNA", slot = "counts")["EGFP-bGhpolyA", ] > 0
+
+seurat_c$EGFP_bGhpolyA_expr <- GetAssayData(object = seurat_c, assay = "RNA", slot = "counts")["EGFP-bGhpolyA", ] > 0
+# Subset cells from a specific sample group,
+Idents(seurat_c) = "orig.ident"
+seurat_c1 <- subset(seurat_c, subset = orig.ident == "Sample1")
+seurat_c2 <- subset(seurat_c, subset = orig.ident == "Sample2")
+
+counts_c<-GetAssayData(object = seurat_c ,  assay = "RNA", slot = "counts")
+counts_c1<-GetAssayData(object = seurat_c1, assay = "RNA", slot = "counts")
+counts_c2<-GetAssayData(object = seurat_c2, assay = "RNA", slot = "counts")
+
+# write cluster matrix and gene expression matrix 
+write.csv(object = seurat_c@meta.data, file = "cluster_c.csv", row.names = FALSE)
+write.csv(counts_c, file = "counts_c.csv")
+write.csv(counts_c1, file = "counts_c1.csv")
+write.csv(counts_c2, file = "counts_c2.csv")
+
+sum(counts_c["EGFP-bGhpolyA",]>0)
+sum(counts_c1["EGFP-bGhpolyA",]>0)
+sum(counts_c2["EGFP-bGhpolyA",]>0)
+
+
+
+
+# Step 1: Aggregate the counts manually from both layers into a single matrix
+counts_sample1 <- GetAssayData(seurat_c, assay = "RNA", layer = "counts.Sample1")
+counts_sample2 <- GetAssayData(seurat_c, assay = "RNA", layer = "counts.Sample2")
+
+# Step 2: Get the common genes and cells between the two matrices
+common_genes <- intersect(rownames(counts_sample1), rownames(counts_sample2))
+common_cells <- intersect(colnames(counts_sample1), colnames(counts_sample2))
+
+# Step 3: Subset both matrices to include only the common genes and cells
+counts_sample1_subset <- counts_sample1[common_genes, common_cells]
+counts_sample2_subset <- counts_sample2[common_genes, common_cells]
+
+# Step 4: Combine the counts matrices by adding them
+combined_counts <- counts_sample1_subset + counts_sample2_subset
+
+# Step 5: Add the combined counts as a new layer in the RNA assay
+seurat_c[["RNA"]]@layers[["combined_counts"]] <- combined_counts
+# Add the combined counts back to the object
+seurat_c[["RNA"]]@data <- combined_counts
+
+# Split into separate Seurat objects
+seurat_split <- SplitObject(seurat_c, split.by = "orig.ident")
+
+# Access EGFP-bGhpolyA expression in each separate Seurat object
+seurat_split$Sample1$EGFP_bGhpolyA_expr <- GetAssayData(seurat_split$Sample1, assay = "RNA", slot = "counts")["EGFP-bGhpolyA", ] > 0
+seurat_split$Sample2$EGFP_bGhpolyA_expr <- GetAssayData(seurat_split$Sample2, assay = "RNA", slot = "counts")["EGFP-bGhpolyA", ] > 0
+
+sum(seurat_split$Sample1$EGFP_bGhpolyA_expr)
+sum(seurat_split$Sample2$EGFP_bGhpolyA_expr)
+
+##########################################################################################
+##########################################################################################
+#To optimize resolution by silhouette and clusteree      
+##########################################################################################
+# Load required libraries
+library(Seurat)
+library(clustree)
+
+# Perform clustering at multiple resolutions
+resolutions <- seq(0.2, 1.0, by = 0.1)
+for (res in resolutions) {
+  sc_subset_c <- FindClusters(sc_subset_c, resolution = res)
+}
+
+# Visualize the cluster tree
+clustree(sc_subset_c, prefix = "RNA_snn_res.")
+
+# Save the clustree plot as an image
+png("c_clustree_plot.png", width = 800, height = 600)
+clustree(sc_subset_c, prefix = "RNA_snn_res.")
+dev.off()
+
+
+
+##########################################################################################
+#to use Library of factoextra to assess average silhouette width of each cluste
+# Install and load libraries
+#install.packages("factoextra")
+#install.packages("cluster")
+library(factoextra)
+library(cluster)
+
+# Get cluster assignments as numeric values
+cluster_assignments <- as.numeric(as.character(Idents(sc_subset_c)))
+
+# Compute PCA distance matrix
+pca_coords <- Embeddings(sc_subset_c, reduction = "pca")
+distance_matrix <- dist(pca_coords)
+
+# Perform silhouette analysis
+sil <- silhouette(cluster_assignments, dist = distance_matrix)
+
+# Visualize silhouette plot
+fviz_silhouette(sil)
+
+# Extract average silhouette widths
+silhouette_summary <- summary(sil)
+cluster_avg_widths <- silhouette_summary$clus.avg.widths  # Average silhouette width per cluster
+overall_avg_width <- silhouette_summary$avg.width         # Overall average silhouette width
+
+# Print the results
+print(cluster_avg_widths)  # Average silhouette width for each cluster
+print(overall_avg_width)   # Overall average silhouette width
+
+##########################################################################################
+#To find the optimal number of clusters using the clustree package (Zappia and Oshlack 2018)
+#Step 1: Perform Clustering at Multiple Resolutions
+resolutions <- seq(0.2, 1.0, by = 0.1) # Define the range of resolutions
+for (res in resolutions) {
+  sc_subset_c <- FindClusters(sc_subset_c, resolution = res)
+}
+library(clustree)
+clustree(sc_subset_c, prefix = "RNA_snn_res.")
+
+#Step 2: Create a Distance Matrix for Silhouette Analysis
+# Extract PCA coordinates
+pca_coords <- Embeddings(sc_subset_c, reduction = "pca")
+
+# Calculate the distance matrix (e.g., Euclidean distance)
+distance_matrix <- dist(pca_coords)
+
+#Step 3: Calculate Silhouette Widths for Each Resolution
+library(cluster)  # For silhouette function
+
+# Initialize a vector to store average silhouette widths
+asw_values <- c()
+
+# Loop through resolutions and calculate silhouette widths
+resolutions <- seq(0.2, 1.0, by = 0.1)
+for (res in resolutions) {
+  # Get cluster assignments
+  cluster_assignments <- as.numeric(as.character(Idents(sc_subset_c)))
+  
+  # Calculate silhouette widths
+  sil <- silhouette(cluster_assignments, dist = distance_matrix)
+  
+  # Store the average silhouette width for this resolution
+  asw_values <- c(asw_values, mean(sil[, 3]))
+}
+
+# Plot silhouette widths across resolutions
+plot(resolutions, asw_values, type = "b", xlab = "Resolution", ylab = "Average Silhouette Width",
+     main = "Silhouette Width vs. Resolution")
+asw_values
+
+
+##########################################################################################
+# Loop through resolutions
+for (res in seq(0.2, 1.0, by = 0.1)) {
+  # Find clusters at the current resolution
+  sc_subset_c <- FindClusters(sc_subset_c, resolution = res)
+  
+  # Convert cluster assignments to numeric
+  cluster_assignments <- as.numeric(as.character(Idents(sc_subset_c)))
+  
+  # Calculate distance matrix from PCA coordinates
+  pca_coords <- Embeddings(sc_subset_c, reduction = "pca")[, pca.dims1]
+  distance_matrix <- dist(pca_coords)
+  
+  # Calculate silhouette widths
+  sil <- silhouette(cluster_assignments, dist = distance_matrix)
+  
+  # Compute the average silhouette width for the current resolution
+  asw_values <- c(asw_values, mean(sil[, 3]))
+}
+
+# Output the average silhouette widths
+print(asw_values)
+
+# Plot the silhouette widths across resolutions
+plot(seq(0.2, 1.0, by = 0.1), asw_values, type = "b", xlab = "Resolution", ylab = "Average Silhouette Width")
+##########################################################################################
+##########################################################################################
+
+#average silhouette width (ASW) is a metric used to assess the quality of clusters.
+# Extract cluster assignments
+cluster_assignments <- Idents(sc_subset_c)
+cluster_assignments <- as.numeric(as.character(Idents(sc_subset_c)))
+# Extract PCA coordinates (or other dimensionality reduction)
+pca_coords <- Embeddings(sc_subset_c, reduction = "pca")
+
+#install.packages("cluster")  # If not already installed
+#library(cluster)
+
+# Calculate the distance matrix (e.g., Euclidean distance)
+distance_matrix <- dist(pca_coords)
+
+# Calculate silhouette widths
+sil <- silhouette(cluster_assignments, dist = distance_matrix)
+
+# Calculate the average silhouette width
+average_silhouette_width <- mean(sil[, 3])
+
+# Print the ASW
+print(average_silhouette_width)
+
+######################################################
+
+##########################################################################################
+
+##########################################################################################
+
+##########################################################################################
+
+##########################################################################################
+
+##########################################################################################
+
+##########################################################################################
+
+##########################################################################################
+
+
+
+
+
+
+
+
+
+
+
+#violin plot
+######################################################
+######################################################
+#markers
+#Sox9_gfp mice marker
+sox9_gfp<- c("EGFP-bGhpolyA", 'Sox9')
+#Stem/early TA positive markers
+limbal1 <- c("Trp63", 'Cdh2', 'Abcg2','Abcb5', 'Krt17',
+             'Lrig1', 'Fzd7', 'Krt5', 'Krt14','Krt15',
+             'Krt19','Tspan7','Cebpd','Bmi1','Itga9') #'Sox17',
+limbal2 <- c('Pbk','Tcf4','Gpha2','Ifitm3' , 
+             'Atf3', 'Cav1', 'Cxcl14', 'Ccl20', 'ENO-1', 'cd44',  'Itgb1') 
+
+#HFSC markers 
+HFSC<- c('Tcf3','Smad1','Smad5')#,'Cd34'
+#Common_putative_stem_cell
+stem_common<- c('Actn1','Anxa3','Bmp4','Ctnnb1','Cecam1','Adam8' )
+#Mature_TA
+TA_mature <- c('Mki67','Birc5','Rrm2')
+#Stem/early TA negaitive markers
+stem_n <- c('Gjb4')
+#Differentiated cells marker
+diff<- c('Gja1','Ivl','Krt12')
+#Conjunctival cells marker
+conj<- c('Krt13','Muc1','Muc4','Muc20','Krt4','Krt7','Krt8','Krt17','Krt6a','Muc2')#,'Muc5b'
+#'Muc5ac'removed for R error.
+
+#Melanocyte
+melanocyte<- c('Tyr','Tyrp1','Mlana','Dct','Mitf',' Ptgs1')
+###################################################### 
+
+
+
+
+
+
+
+
+png(filename="c_EGFP-bGhpolyA.png")
+VlnPlot(sc_subset_c, features = c("EGFP-bGhpolyA"))   
+dev.off() 
+
+png(filename="c_sox9_gfp_violin.png")
+VlnPlot(sc_subset_c, features =sox9_gfp, pt.size = 0, stack = TRUE, flip = TRUE, cols = c( "pink", "lightgreen"))
+dev.off() 
+png(filename="c_limbal1_violin.png")
+VlnPlot(sc_subset_c, features =limbal1, pt.size = 0, stack = TRUE, flip = TRUE)
+dev.off() 
+png(filename="c_limbal2_violin.png")
+VlnPlot(sc_subset_c, features =limbal2, pt.size = 0, stack = TRUE, flip = TRUE)
+dev.off() 
+png(filename="c_HFSC_violin.png")
+VlnPlot(sc_subset_c, features =HFSC, pt.size = 0, stack = TRUE, flip = TRUE)
+dev.off()   
+png(filename="c_stem_common_violin.png")
+VlnPlot(sc_subset_c, features =stem_common, pt.size = 0, stack = TRUE, flip = TRUE)
+dev.off()   
+png(filename="c_TA_mature_violin.png")
+VlnPlot(sc_subset_c, features =TA_mature, pt.size = 0, stack = TRUE, flip = TRUE)
+dev.off() 
+png(filename="c_stem_n_violin.png")
+VlnPlot(sc_subset_c, features =stem_n, pt.size = 0, flip = TRUE)#only one, no stack needed
+dev.off() 
+png(filename="c_diff_violin.png")
+VlnPlot(sc_subset_c, features =diff, pt.size = 0, stack = TRUE, flip = TRUE)
+dev.off() 
+png(filename="c_conj_violin.png")
+VlnPlot(sc_subset_c, features =conj, pt.size = 0, stack = TRUE, flip = TRUE)
+dev.off()   
+png(filename="c_melanocyte_violin.png")
+VlnPlot(sc_subset_c, features =melanocyte, pt.size = 0, stack = TRUE, flip = TRUE)
+dev.off()   
+
+######################################################
+#Lu et al., 2023
+#limbal
+lu_limbal<- c('Trp63','Gpha2','Krt14' )
+#transitAmplifying
+lu_TA<- c('Mki67','Ccna2','Hmgb2','Cenpa','Cdk1')
+#wing
+lu_wing<- c('Dsc2','Cdkn1a','Cldn4')
+#basal
+lu_basal<- c('Itgb1','Itgb4','Itga6')
+#superficial
+lu_superficial<- c('Tjp3','Muc20','Elf3')
+#conjunctival
+lu_conj<- c('Krt4','Krt7','Krt13','Krt17','Krt19','Krt6b' )
+###################################################### 
+png(filename="c_lu_limbal_lu_violin.png")
+#VlnPlot(sc_subset_c, features =lu_limbal, pt.size = 0, stack = TRUE, flip = TRUE)
+dev.off() 
+png(filename="c_lu_TA_lu_violin.png")
+VlnPlot(sc_subset_c, features =lu_TA, pt.size = 0, stack = TRUE, flip = TRUE)
+dev.off() 
+png(filename="c_lu_wing_lu_violin.png")
+VlnPlot(sc_subset_c, features =lu_wing, pt.size = 0, stack = TRUE, flip = TRUE)
+dev.off() 
+png(filename="c_lu_basal_lu_violin.png")
+VlnPlot(sc_subset_c, features =lu_basal, pt.size = 0, stack = TRUE, flip = TRUE)
+dev.off()   
+png(filename="c_lu_superficial_lu_violin.png")
+VlnPlot(sc_subset_c, features =lu_superficial, pt.size = 0, stack = TRUE, flip = TRUE)
+dev.off() 
+png(filename="c_lu_conj_lu_violin.png")
+VlnPlot(sc_subset_c, features =lu_conj, pt.size = 0, stack = TRUE, flip = TRUE)
+dev.off()   
+
+######################################################
+#Kaplan and Lavker, et al., 2019;
+Kaplan_limbal<- c('Lrig1','Txnip' )
+Kaplan_TA<- c('Mki67','Pcna','Pbk','H2ax','Atf3')
+Kaplan_epi<- c('Cdh1','Pax6','Krt15' )
+Kaplan_diff<- c('Cldnd1','Gjb4','Gjb3','Gja1' )
+Kaplan_conj<- c('Muc4','Krt13','Krt19' )
+###################################################### 
+png(filename="c_Kaplan_limbal_Kaplan_violin.png")
+VlnPlot(sc_subset_c, features =Kaplan_limbal, pt.size = 0, stack = TRUE, flip = TRUE)
+dev.off() 
+png(filename="c_Kaplan_TA_kaplan_violin.png")
+VlnPlot(sc_subset_c, features =Kaplan_TA, pt.size = 0, stack = TRUE, flip = TRUE)
+dev.off() 
+png(filename="c_Kaplan_epi_kaplan_violin.png")
+VlnPlot(sc_subset_c, features =Kaplan_epi, pt.size = 0, stack = TRUE, flip = TRUE)
+dev.off() 
+png(filename="c_Kaplan_diff_kaplan_violin.png")
+VlnPlot(sc_subset_c, features =Kaplan_diff, pt.size = 0, stack = TRUE, flip = TRUE)
+dev.off()   
+png(filename="c_Kaplan_conj_kaplan_violin.png")
+VlnPlot(sc_subset_c, features =Kaplan_conj, pt.size = 0, stack = TRUE, flip = TRUE)
+dev.off()   
+######################################################
+###################################################### 
+#Altshuler and Shalom-Feuerstein, 2021 Cell Stem Cell.
+A_limbal_outer<- c('Gpha2', 'Krt15', 'Ifitm3', 'Cd63', 'Cd45') #Cd45 or CD45???
+A_limbal_inner<- c('Atf3', 'Krt15','Krt14','Mt1-2' )
+
+A_limbal_basal<- c('Prdm1','Krt15', 'Krt14','Krt17' )
+
+A_conj <- c('Krt17', 'Krt4', 'Krt19', 'Krt6a', 'Krt13','Krt8')
+######################################################
+png(filename="c_A_limbal_outer_violin.png")
+VlnPlot(sc_subset_c, features =A_limbal_outer, pt.size = 0, stack = TRUE, flip = TRUE)
+dev.off() 
+png(filename="c_A_limbal_inner_violin.png")
+VlnPlot(sc_subset_c, features =A_limbal_inner, pt.size = 0, stack = TRUE, flip = TRUE)
+dev.off() 
+png(filename="c_A_limbal_basal_violin.png")
+VlnPlot(sc_subset_c, features =A_limbal_basal, pt.size = 0, stack = TRUE, flip = TRUE)
+dev.off() 
+png(filename="c_A_conj_violin.png")
+VlnPlot(sc_subset_c, features =A_conj, pt.size = 0, stack = TRUE, flip = TRUE)
+dev.off()   
+######################################################
+#finnal choice
+  ######################################################
+  png(filename="c_Krt13.png")
+  VlnPlot(sc_subset_c, features='Krt13', pt.size = 0, stack = TRUE, flip = TRUE)
+  dev.off() 
+
+
+
+
+
+
+##########################################################################################
+#cell cycle
+##########################################################################################
+png(filename="sc_subset_c_ccycle.png")
+DimPlot(sc_subset_c)
+dev.off()
+png(filename="sc_subset_c_ccycle_s3_s4.png")
+DimPlot(sc_subset_c, split.by = 'orig.ident')
+dev.off()
+
+# Create the table for cell cycle phases across seurat clusters
+c_ccycle_table <- table(sc_subset_c@meta.data$Phase,sc_subset_c@meta.data$seurat_clusters )
+write.csv(c_ccycle_table, file="c_ccycle_table.csv", row.names = TRUE)
+# Save the plot to a PNG file
+png(filename="c_ccycle_bar.png", width=800, height=600)
+# Create the barplot
+barplot(c_ccycle_table, 
+        beside = TRUE,         # Side-by-side bars for each phase
+        col = c("lightblue", "lightgreen", "lightpink"),  # Colors for each phase
+        legend = rownames(c_ccycle_table),   # Add legend based on row names (Phases)
+        main = "Cell Cycle Phases Across Seurat Clusters", # Plot title
+        xlab = "Seurat Clusters",             # X-axis label
+        ylab = "Cell Count",                  # Y-axis label
+        cex.axis = 1.5,                       # Adjust axis text size
+        cex.lab = 1.5,                        # Adjust axis label size
+        cex.main = 1.8)                       # Adjust title size
+# Add a legend
+legend("topright",                            # Position of the legend
+       legend = rownames(c_ccycle_table),    # Labels for the legend
+       fill = c("lightblue", "lightgreen", "lightpink"), # Matching colors for the phases
+       cex = 1.5)                             # Adjust legend text size
+# Close the PNG device
+dev.off()
+
+
+
+######################################################
+##########################################################################################
+###########Differential gene expression analysis(DEG) on EGFP-bGhpoly expressed cells############
+# Add expression information for "EGFP-bGhpolyA"
+sc_subset_c$EGFP_bGhpolyA_expr <- GetAssayData(object = sc_subset_c, assay = "RNA", slot = "counts")["EGFP-bGhpolyA", ] > 0
+
+
+# Step 1: Add labels for EGFP-bGhpolyA expression (Positive/Negative)
+sc_subset_c$EGFP_bGhpolyA_expr <- ifelse(sc_subset_c$EGFP_bGhpolyA_expr, 
+                                          "EGFP Positive", 
+                                          "EGFP Negative")
+
+# Step 2: Generate a violin plot while preserving clusters
+
+# Generate a violin plot with adjusted title size
+png(filename = "c_cluster_EGFP_Krt12.png")
+VlnPlot(sc_subset_c, 
+        features = c("Krt12"), 
+        group.by = "seurat_clusters", 
+        split.by = "EGFP_bGhpolyA_expr", 
+        pt.size = 0.1) + 
+  ggtitle("Krt12 Expression in Cells with or without EGFP Expression by Cluster") +
+  xlab("Cluster") +
+  ylab("Krt12 Expression") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1), # Rotate x-axis labels
+    plot.title = element_text(size = 10) # Adjust title text size to make it fit
+  )
+dev.off()
+# Generate a violin plot with adjusted title size
+png(filename = "c_cluster_EGFP_Gja1.png")
+VlnPlot(sc_subset_c, 
+        features = c("Gja1"), 
+        group.by = "seurat_clusters", 
+        split.by = "EGFP_bGhpolyA_expr", 
+        pt.size = 0.1) + 
+  ggtitle("Gja1 Expression in Cells with or without EGFP Expression by Cluster") +
+  xlab("Cluster") +
+  ylab("Gja1 Expression") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1), # Rotate x-axis labels
+    plot.title = element_text(size = 10) # Adjust title text size to make it fit
+  )
+dev.off()
+
+
+# Generate a violin plot with adjusted title size
+png(filename = "c_cluster_EGFP_Sox9.png")
+VlnPlot(sc_subset_c, 
+        features = c("Sox9"), 
+        group.by = "seurat_clusters", 
+        split.by = "EGFP_bGhpolyA_expr", 
+        pt.size = 0.1) + 
+  ggtitle("Sox9 Expression in Cells with or without EGFP Expression by Cluster") +
+  xlab("Cluster") +
+  ylab("Sox9 Expression") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1), # Rotate x-axis labels
+    plot.title = element_text(size = 10) # Adjust title text size to make it fit
+  )
+dev.off()
+
+# Generate a violin plot with adjusted title size
+png(filename = "c_cluster_EGFP_Krt15.png")
+VlnPlot(sc_subset_c, 
+        features = c("Krt15"), 
+        group.by = "seurat_clusters", 
+        split.by = "EGFP_bGhpolyA_expr", 
+        pt.size = 0.1) + 
+  ggtitle("Krt15 Expression in Cells with or without EGFP Expression by Cluster") +
+  xlab("Cluster") +
+  ylab("Krt15 Expression") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1), # Rotate x-axis labels
+    plot.title = element_text(size = 10) # Adjust title text size to make it fit
+  )
+dev.off()
+
+# Generate a violin plot with adjusted title size
+png(filename = "c_cluster_EGFP_Krt18.png")
+VlnPlot(sc_subset_c, 
+        features = c("Krt18"), 
+        group.by = "seurat_clusters", 
+        split.by = "EGFP_bGhpolyA_expr", 
+        pt.size = 0.1) + 
+  ggtitle("Krt18 Expression in Cells with or without EGFP Expression by Cluster") +
+  xlab("Cluster") +
+  ylab("Krt18 Expression") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1), # Rotate x-axis labels
+    plot.title = element_text(size = 10) # Adjust title text size to make it fit
+  )
+dev.off()
+
+######################################################
+############################################################################################################
+#check  gene among clusters by dotplot or UMAP
+############################################################################################################
+# Load the Seurat object
+
+#UMAP feature plot
+png(filename="FeaturePlot_c_EGFP_Sox9.png")
+FeaturePlot(sc_subset_c, features = c("EGFP-bGhpolyA","Sox9"), blend = TRUE, split.by = 'orig.ident')
+dev.off()
+
+# check  gene among clusters by dotplot
+png(filename="c_FeaturePlot_dot.png")
+features <- c('EGFP-bGhpolyA', 'Sox9', 'Krt15', 'Krt18', 'Krt8', 'Krt19',
+              'Fmo1','Fmo2','Gabrp','Anxa3','Alcam', 'Trp63', 'Gjb1', 'Gjb3', 
+              'Lrig1', 'Txnip','Mki67', 'Krt12','Muc4')
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()
+dev.off()
+
+########################################################################################################################
+#check LSCS part 3 by dotplot
+png(filename="c_dot_LSCS3.png", width = 500, height = 400)
+features <- c('Gpha2', 'Cd63', 'Ifitm3', 'Cd4','Il13','Il17a', 'Ngf', 'Fgf2', 'Ehf', 'Klf4', 'Krt15', 'Krt14', 'Krt4','Muc1', 'Muc4', 'Klf5', 'Tgfb2', 'Ovol2m', 'Cd31','Krt10'   ) 
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Putative Limbal Stem Cell Marker in Homeostasis") +
+  scale_color_gradientn(colors = c("blue", "white", "red"))
+dev.off()
+
+#check LSCS part 3 by dotplot
+png(filename="wh_dot_LSCS3.png", width = 500, height = 400)
+features <- c('Lrig1','Gpha2', 'Cd63', 'Ifitm3')
+DotPlot(sc_subset_wh, features = features )+ RotatedAxis()+
+  ggtitle("Putative Limbal Stem Cell Marker in Wound Healing") +
+  scale_color_gradientn(colors = c("blue", "white", "red"))
+dev.off()
+########################################################################################################################
+
+
+
+######################################################
+
+
+#check LSCS part 1 by dotplot
+# Define the list of features for DotPlot, with the renamed "EGFP-bGhpolyA" as "EGFP"
+features <- c('EGFP-bGhpolyA', 'Sox9',  'Txnip','Tspan7','Cd63','Bmi1', 'Npdc1','Cebpd')
+#. "Trp63", 'Cdh2', 'Abcg2','Abcb5', 'Pbk','Tcf4','Gpha2','Itga9','Itgb1',
+#'Ifitm3' , 'Atf3', 'Cav1', 'Cxcl14', 'Ccl20',  'Lrig1', 'Fzd7',  'Sox17', ,No 'ENO-1',#'Mt1-2',#'Ac011526.1', #'C10orf10','cd44'
+
+# Create a custom mapping of feature names for visualization
+custom_labels <- setNames(c('EGFP', 'Sox9',  'Txnip','Tspan7','Cd63','Bmi1', 'Npdc1','Cebpd'
+                            ),
+                          features)
+
+# Generate the DotPlot with custom labels for "EGFP-bGhpolyA" as "EGFP"
+png(filename="c_dot_LSCS1.png", width = 500, height = 400)
+DotPlot(sc_subset_c, features = features) +
+  RotatedAxis() +
+  ggtitle("Putative Limbal Stem Cell Marker") +
+  scale_x_discrete(labels = custom_labels)+  # Apply the custom labels for visualization
+  scale_color_gradientn(colors = c("blue", "white", "red"))  # Red = high expression
+dev.off()
+
+
+
+
+#check LSCS part 2 by dotplot
+png(filename="c_dot_LSCS2.png", width = 500, height = 400)
+features <- c('Krt15','Krt19','Krt17','Krt5', 'Krt14','Tspan7','Cebpd','Bmi1',    'Cd63',  'Postn', 
+              'A2m',   'Sele', 'Ecscr', 'Ramp3', 'Rnase1', 'Npdc1', 'Igfbp4', 'Slc2a3', 'Nnmt', 'Klf2', 
+              'Pdk4')
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Putative Limbal Stem Cell Marker") +
+  scale_color_gradientn(colors = c("blue", "white", "red"))
+dev.off()
+
+
+
+#check CPSC by dotplot
+png(filename="c_dot_CPSC.png", width = 500, height = 400)
+features <- c('Actn1','Anxa3','Bmp4','Ctnnb1','Cecam1','Adam8')
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Common Putative Stem Cell Marker") +
+  scale_color_gradientn(colors = c("blue", "white", "red"))
+dev.off()
+  
+
+#check HSC by dotplot
+png(filename="c_dot_HSC.png", width = 500, height = 400)
+features <- c('Tcf3','Smad1','Smad5','Cd34')
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Hair follicle stem cells") +
+  scale_color_gradientn(colors = c("blue", "white", "red"))
+dev.off()
+
+#check PGC by dotplot
+png(filename="c_dot_PGC.png", width = 500, height = 400)
+features <- c('Krt14', 'Krt15', 'Krt19', 'Dcn', 'Plin2',  'Degs1', 'Mmp10', 'Ifitm3', 'Slc6a6', 'Ltb4r', 'Slpi')
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Progenitor Cells Marker") +
+  scale_color_gradientn(colors = c("blue", "white", "red"))
+dev.off()
+
+#check TA by dotplot
+png(filename="c_dot_TA.png", width = 500, height = 400)
+features <- c('Mki67','Birc5','Rrm2','Ccna2','Cenpa','Cdk1','Pbk','H2ax', 'Tk1')#'Hmgb2','Pcna','Atf3'
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Transiently Amplifying Cell marker") +
+  scale_color_gradientn(colors = c("blue", "white", "red"))
+dev.off()
+
+
+#check PFC by dotplot
+png(filename="c_dot_PFC.png", width = 500, height = 400)
+features <- c('Mki67','Birc5','Rrm2','Pcna', 'Ccnb1',  'Top2a',  'Foxm1', 'Plk1', 'Mybl2', 'Bub1', 'E2f1','Mcm2', 'Mcm3', 'Gmnn' )
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Proliferation Cell Marker") +
+  scale_color_gradientn(colors = c("blue", "white", "red"))
+dev.off()
+
+#check BC by dotplot
+png(filename="c_dot_BC.png", width = 500, height = 400)
+features <- c('Itgb1','Itgb4','Itga6')
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Basal Cell Marker") +
+  scale_color_gradientn(colors = c("blue", "white", "red"))
+dev.off()
+#check WC by dotplot
+png(filename="c_dot_WC.png", width = 500, height = 400)
+features <- c('Dsc2','Cdkn1a','Cldn4')
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Wing Cell Marker") +
+  scale_color_gradientn(colors = c("blue", "white", "red"))
+dev.off()
+#check SC by dotplot
+png(filename="c_dot_SC.png", width = 500, height = 400)
+features <- c('Tjp3','Muc20','Elf3')
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Superficial Cell Marker") +
+  scale_color_gradientn(colors = c("blue", "white", "red"))
+dev.off()
+#check LCSC_N by dotplot
+png(filename="c_dot_LCSC_N.png", width = 500, height = 400)
+features <- c('Gjb4')
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("LSCS-negative Cell Marker") +
+  scale_color_gradientn(colors = c("blue", "white", "red"))
+dev.off()
+#check DC by dotplot
+png(filename="c_dot_DC.png", width = 500, height = 400)
+features <- c('Krt12','Ivl','Gjb4','Gjb3','Sprr1a', 'Sprr1b', 'Gja1','Cldnd1', 'Cdh1', 'Krt24', 'Ceacam1')#,No 'Krt3', 'Sprr2a' 
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Corneal Differentiation Cell Marker") +
+  scale_color_gradientn(colors = c("blue", "white", "red"))
+dev.off()
+#check CC by dotplot
+png(filename="c_dot_CC.png", width = 500, height = 400)
+features <- c('Krt13','Muc20','Krt4', 'Muc1','Muc4','Krt7','Krt8','Krt17','Krt6a','Muc2',  'Muc16') # 'Krt19',No 'Muc5ac','Muc5b'
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Conjunctival Cell Marker") +
+  scale_color_gradientn(colors = c("blue", "white", "red"))
+dev.off()
+#check MC by dotplot
+png(filename="c_dot_MC.png", width = 500, height = 400)
+features <- c('Tyr','Tyrp1','Mlana','Dct','Mitf',' Ptgs1', 'Mc1r')
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Melanocyte Cell Marker") +
+  scale_color_gradientn(colors = c("blue", "white", "red"))
+dev.off()
+#check EC by dotplot
+png(filename="c_dot_EC.png", width = 500, height = 400)
+features <- c('Cdh1','Pax6','Krt15')
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Epithelial Cell Marker") +
+  scale_color_gradientn(colors = c("blue", "white", "red"))
+dev.off()
+#check ESC by dotplot
+png(filename="c_dot_ESC.png", width = 500, height = 400)
+features <- c('Slc2a3', 'Itm2a', 'Tcf4', 'Postn', 'C10orf10', 'Rhoj', 'A2m', 'Cthrc1','Itga1', 'Abcg2', 'Abcb5', 'Lef1')
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Epithelial Stem Cell Marker") +
+  scale_color_gradientn(colors = c("blue", "white", "red"))
+dev.off()
+#check PMC by dotplot
+png(filename="c_dot_PMC.png", width = 500, height = 400)
+features <- c('Htra1')
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Post-Mitotic Cell Marker") +
+  scale_color_gradientn(colors = c("blue", "white", "red"))
+dev.off()
+#check FC by dotplot
+png(filename="c_dot_FC.png", width = 500, height = 400)
+features <- c('Vimentin', 'Asma' , 'Cd90', 'Thy1', 'kera')
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Fibroblast Cell Marker") +
+  scale_color_gradientn(colors = c("blue", "white", "red"))
+dev.off()
+#check CSC by dotplot
+png(filename="c_dot_CSC.png", width = 500, height = 400)
+features <- c('kera', 'Pax6', 'Abcg2','Vimentin')
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Corneal Stromal Cell Marker") +
+  scale_color_gradientn(colors = c("blue", "white", "red"))
+dev.off()
+
+#check Tcell gene by dotplot
+png(filename="c_dot_Tcell.png", width = 500, height = 400)
+features <- c('Neus', 'S100a9', 'Macs', 'Fcrls', 'Cd3g', 'Tregs', 'Foxp3', 'γδT', 'Trdc', 
+              'Il17re','Il17rc','Il17f','Il17rb','Il17a','Il17d','Il17b', 'Il17e','Il17ra', 'Ifngr1', 'Ifngr2', 
+              'Ifnar2', 'Ifnar1',  'Cd34','Cd46', 'Klrg1')#no 'Th1', 'Th2', 'Th17',
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Corneal Homeostasis TCell Marker") +
+  scale_color_gradientn(colors = c("blue", "white", "red"))
+dev.off()
+#check neuron gene by dotplot
+png(filename="c_dot_Neuron.png", width = 500, height = 400)
+features <- c('Tubb3', 'Map2', 'Neun', 'Nf', 'S100b', 'Gfap', 'Mbp', 'Syp', 'Psd95', 'Gap43', 'Dcx', 'Nestin')
+DotPlot(sc_subset_wh, features = features )+ RotatedAxis()+
+  ggtitle("Corneal Homeostasis Cell Marker Neuron") +
+  scale_color_gradientn(colors = c("blue", "white", "red"))
+dev.off()
+
+
+
+#genes interesting
+neuron <- c('Tubb3', 'Map2',  'S100b', 'Gfap', 'Mbp', 'Syp',  'Gap43')
+NR <- c('P2x','P2y', 'Trpv1', 'Trpm8', 'Trpa1', 'Trka', 'P75ntr', 'Cgrp')#Ngf,  'Netrin', 'Draxin', 'Vegf'
+Tcell <- ('Neus', 'S100a9', 'Macs', 'Fcrls', 'Cd3g', 'Tregs', 'Foxp3', 'γδT', 'Trdc', 
+           'Il17re','Il17rc','Il17f','Il17rb','Il17a','Il17d','Il17b', 'Il17e','Il17ra', 'Ifngr1', 'Ifngr2', 
+           'Ifnar2', 'Ifnar1',  'Cd34','Cd46', 'Klrg1')#no 'Th1', 'Th2', 'Th17',
+Fibroblast <-  c('Thy1')#'Vimentin', 'Asma' , 'Cd90', , 'kera' #Fibroblast Cell Marker
+
+features <- NR
+# Custom cluster labels for 13 clusters (0 to 12)
+custom_cluster_labels <- c(
+  '0' = 'BC',
+  '1' = 'TD',
+  '2' = 'TD',
+  '3' = 'TD',
+  '4' = 'UC',
+  '5' = 'TA',
+  '6' = 'BC',
+  '7' = 'TA',
+  '8' = 'Conj',
+  '9' = 'LSC',
+  '10' = 'BC',
+  '11' = 'PC',
+  '12' = 'LSC'
+)
+
+# Plot with custom x-axis labels (clusters)
+png(filename = "c_dot_1.png", width = 500, height = 400)
+DotPlot(sc_subset_c, features = features) +
+  RotatedAxis() +
+  ggtitle("Neuron Receptor Gene Expression in Homeostasis") +
+  scale_y_discrete(labels = custom_cluster_labels) +  # Change cluster labels on y
+  scale_color_gradientn(colors = c("blue", "white", "red"))  # Expression gradient
+dev.off()
+
+
+
+
+
+######################################################
+###########################################################################################################
+#violin plot
+############################################################################################################
+#check LSCS part 1 by violin plot
+
+features <- c('EGFP-bGhpolyA', 'Sox9',  'Txnip','Tspan7','Cd63','Bmi1', 'Npdc1','Cebpd')
+#. "Trp63", 'Cdh2', 'Abcg2','Abcb5', 'Pbk','Tcf4','Gpha2','Itga9','Itgb1',
+#'Ifitm3' , 'Atf3', 'Cav1', 'Cxcl14', 'Ccl20',  'Lrig1', 'Fzd7',  'Sox17', ,No 'ENO-1',#'Mt1-2',#'Ac011526.1', #'C10orf10','cd44'
+
+png(filename="c_violin_LSCS1.png")
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Putative Limbal Stem Cell Marker") 
+dev.off()
+
+
+
+#check LSCS part 2 by violin plot
+png(filename="c_violin_LSCS2.png")
+features <- c('Krt15','Krt19','Krt17','Krt5', 'Krt14','Tspan7','Cebpd','Bmi1',    'Cd63',  'Postn', 
+              'A2m', 'Ecscr', 'Ramp3', 'Rnase1', 'Npdc1', 'Igfbp4', 'Slc2a3', 'Nnmt', 'Klf2', 
+              'Pdk4')#,   'Sele'
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Putative Limbal Stem Cell Marker") 
+dev.off()
+
+#check CPSC by violin plot
+png(filename="c_violin_CPSC.png")
+features <- c('Actn1','Anxa3','Bmp4','Ctnnb1','Adam8')#,'Cecam1'
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Common Putative Stem Cell Marker") 
+dev.off()
+
+
+#check HSC by violin plot
+png(filename="c_violin_HSC.png")
+features <- c('Tcf3','Smad1','Smad5')#,'Cd34'
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Hair follicle stem cells") 
+dev.off()
+
+#check PGC by violin plot
+png(filename="c_violin_PGC.png")
+features <- c('Krt14', 'Krt15', 'Krt19', 'Dcn', 'Plin2'  , 'Degs1', 'Mmp10', 'Ifitm3', 'Slc6a6', 'Slpi')#, 'Ltb4r'
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Progenitor Cells Marker") 
+dev.off()
+
+#check TA by violin plot
+png(filename="c_violin_TA.png")
+features <- c('Mki67','Birc5','Rrm2','Ccna2','Cenpa','Cdk1','Pbk','H2ax', 'Tk1')#'Hmgb2','Pcna','Atf3'
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Transiently Amplifying Cell marker") 
+dev.off()
+
+
+#check PFC by violin plot
+png(filename="c_violin_PFC.png")
+features <- c('Mki67','Birc5','Rrm2','Pcna', 'Ccnb1',  'Top2a',  'Foxm1', 'Plk1', 'Mybl2', 'Bub1', 'E2f1','Mcm2', 'Mcm3', 'Gmnn' )
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Proliferation Cell Marker") 
+dev.off()
+
+#check BC by violin plot
+png(filename="c_violin_BC.png")
+features <- c('Itgb1','Itgb4','Itga6')
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Basal Cell Marker") 
+dev.off()
+#check WC by violin plot
+png(filename="c_violin_WC.png")
+features <- c('Dsc2','Cdkn1a','Cldn4')
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Wing Cell Marker") 
+dev.off()
+#check SC by violin plot
+png(filename="c_violin_SC.png")
+features <- c('Tjp3','Muc20','Elf3')
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Superficial Cell Marker") 
+dev.off()
+#check LCSC_N by violin plot
+png(filename="c_violin_LCSC_N.png")
+features <- c('Gjb4')
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("LSCS-negative Cell Marker") 
+dev.off()
+#check DC by violin plot
+png(filename="c_violin_DC.png")
+features <- c('Krt12','Ivl','Gjb4','Gjb3','Sprr1a', 'Sprr1b' )#'Gja1','Cldnd1', 'Cdh1', 'Krt24', 'Ceacam1',No 'Krt3', 'Sprr2a' 
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Corneal Differentiation Cell Marker") 
+dev.off()
+#check CC by violin plot
+png(filename="c_violin_CC.png")
+features <- c('Krt13','Muc20','Krt4')# 'Muc1','Muc4','Krt7','Krt8','Krt17','Krt6a','Muc2', 'Krt19',No 'Muc5ac','Muc5b'
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Conjunctival Cell Marker") 
+dev.off()
+#check MC by violin plot
+png(filename="c_violin_MC.png")
+features <- c('Tyr','Tyrp1','Mlana','Dct','Mitf', 'Mc1r')#,' Ptgs1'
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Melanocyte Cell Marker") 
+dev.off()
+#check EC by violin plot
+png(filename="c_violin_EC.png")
+features <- c('Cdh1','Pax6','Krt15')
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Epithelial Cell Marker") 
+dev.off()
+#check ESC by violin plot
+png(filename="c_violin_ESC.png")
+features <- c('Slc2a3', 'Itm2a', 'Tcf4', 'Postn', 'Rhoj', 'A2m', 'Cthrc1','Itga1', 'Abcg2', 'Abcb5', 'Lef1')#, 'C10orf10'
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Epithelial Stem Cell Marker") 
+dev.off()
+#check PMC by violin plot
+png(filename="c_violin_PMC.png")
+features <- c('Htra1')
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Post-Mitotic Cell Marker") 
+dev.off()
+#check FC by violin plot
+png(filename="c_violin_FC.png")
+features <- c('Thy1')#,'Vimentin', 'Asma' , 'Cd90', 'kera'
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Fibroblast Cell Marker") 
+dev.off()
+#check CSC by violin plot
+png(filename="c_violin_CSC.png")
+features <- c( 'Pax6', 'Abcg2')#'kera',,'Vimentin'
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Corneal Stromal Cell Marker") 
+dev.off()
+######################################################
+
+#######################################################################
+#neuron gene by violinplot
+png(filename="c_violin_Neuron.png")
+features <- c('Tubb3', 'Map2',  'S100b', 'Gfap', 'Mbp', 'Syp',  'Gap43')# , 'Dcx', 'Neun', 'Nf','Psd95', 'Nestin'
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Corneal Cell Marker Neuron") 
+dev.off()
+#neuron gene by dotplot
+png(filename="c_dot_Neuron.png")
+features <- c('Tubb3', 'Map2',  'S100b', 'Gfap', 'Mbp', 'Syp',  'Gap43')# , 'Dcx', 'Neun', 'Nf','Psd95', 'Nestin'
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Corneal Cell Marker Neuron") 
+dev.off()
+#######################################################################
+#mononuclear cells (Monos, Ccl7+), 
+#macrophages (Macs, Fcrls+), neutrophils (Neus, S100a9+), 
+#langerhans cells (Lans, Cd207+), 
+#dendritic cell (DCs, Flt3+), 
+#T cells (Cd3g+), 
+#regulatory T cells (Tregs, Foxp3+) and γδT cells (γδT, Trdc+)
+
+png(filename="c_violin_Tcell.png")
+features <- c(  'S100a9',  'Fcrls', 'Cd3g','Foxp3', 'Trdc')# 'Neus','Macs', 'Tregs', 'γδT',
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Corneal Cell Marker T Cell") 
+dev.off()
+#Tcell gene by dotplot
+png(filename="c_dot_Tcell.png")
+features <- c( 'S100a9',  'Fcrls', 'Cd3g','Foxp3', 'Trdc')# 'Neus','Macs', 'Tregs', 'γδT',
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Corneal Cell Marker T Cell ") 
+dev.off()
+#############################################################################################################################
+##############################################################################################################################################################
+######################################################
+#check Candidate by dotplot
+png(filename="c_dot_Candidate.png")
+features <- c('Krt18', 'Krt8', 'Krt19','Fmo1','Fmo2','Gabrp','Anxa3','Alcam')
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Candidate Cell Marker") 
+dev.off()
+#check Candidate by violin plot
+png(filename="c_violin_Candidate.png")
+features <- c('Krt18', 'Krt8', 'Krt19','Fmo1','Fmo2','Gabrp','Anxa3','Alcam')
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Candidate Cell Marker in Homeostasis") 
+dev.off()
+######################################################
+
+#check cluster12 by violin plot
+png(filename="c_violin_12_selected 1.png")
+features <- c('Krt18', 'Krt8', 'Krt19','Anxa3','Tspan7', 'Bmi1')
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Putative Limbal Stem Cell marker 1") 
+dev.off()
+
+#check cluster12 by dotplot
+png(filename="c_dot_12_selected 1.png")
+features <- c('Krt18', 'Krt8', 'Krt19','Anxa3','Tspan7', 'Bmi1')
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Putative Limbal Stem Cell marker 1") 
+dev.off()
+
+#check cluster12 by violin plot
+png(filename="c_violin_12_selected 2.png")
+features <- c( 'Npdc1', 'Cd63', 'Cebpd', 'Lrig1', 'Fzd7', 'Tcf4')
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Putative Limbal Stem Cell marker 2") 
+dev.off()
+
+#check cluster12 by dotplot
+png(filename="c_dot_12_selected 2.png")
+features <- c( 'Npdc1', 'Cd63', 'Cebpd', 'Lrig1', 'Fzd7',  'Tcf4')
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Putative Limbal Stem Cell marker 2") 
+dev.off()
+######################################################
+#check TA by violin plot
+png(filename="c_violin_TA_selected.png")
+features <- c('Mki67','Birc5','Cenpa')
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Transiently Amplifying Cell marker") 
+dev.off()
+
+#check TA by dotplot
+png(filename="c_dot_TA_selected.png")
+features <- c('Mki67','Birc5','Cenpa')
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Transiently Amplifying Cell marker") 
+dev.off()
+
+######################################################
+#check EGFP-bGhpolyA by violin plot
+png(filename="c_EGFP-bGhpolyA.png")
+features <- 'EGFP-bGhpolyA'
+VlnPlot(sc_subset_c, features = features , pt.size = 0, flip = TRUE)+
+  ggtitle("EGFP-bGhpolyA Postive") 
+dev.off()
+
+#check EGFP-bGhpolyA by dotplot
+png(filename="c_dot_EGFP-bGhpolyA.png")
+features <- 'EGFP-bGhpolyA'
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("EGFP-bGhpolyA Postive") 
+dev.off()
+
+
+
+
+
+###########################################################################################
+#Assigning cell type identity to clusters
+#we can use canonical markers to easily match the unbiased clustering to known cell types:
+
+new.cluster.ids_c <- c("Unknown", "Unknown", "Dif", "Dif", "Dif", 
+                       "TA","Unknown",  "TA", "Conj", "LSCS", 
+                       "Dif",  "Conj","LSCS_egfp" )
+names(new.cluster.ids_c) <- levels(sc_subset_c)
+sc_subset_c<- RenameIdents(sc_subset_c, new.cluster.ids_c)
+DimPlot(sc_subset_c, reduction = "umap", label = TRUE, pt.size = 0.5) + NoLegend()            
+library(ggplot2)
+plot <- DimPlot(sc_subset_c, reduction = "umap", label = TRUE, label.size = 4) + xlab("UMAP 1") + ylab("UMAP 2") +
+  theme(axis.title = element_text(size = 18), legend.text = element_text(size = 18)) + guides(colour = guide_legend(override.aes = list(size = 10)))
+ggsave(filename = "sc_subset_c_clustername_umap2025.jpg", height = 7, width = 10, plot = plot, quality = 50)
+
+#assign all annotation back to numbers if it is needed
+#orig.cluster.ids <- c("0", "1", "2", "3", "4", "5", "6","7", "8", "9", "10", "11", "12" )
+orig.cluster.ids <- c(0,1,2,3,4,5,6,7,8,9,10,11,12 )
+names(orig.cluster.ids) <- levels(sc_subset_c)
+sc_subset_c <- RenameIdents(sc_subset_c, orig.cluster.ids)
+
+##############################################################################################################################################################
+#selected Candidate genes in Stem Cell Homeostasis
+##############################################################################################################################################################
+
+#check Candidate by violin plot
+png(filename="c_violin_Candidate2.png")
+features <- c('Dmbt1',  'Erbb4','Nupr1','Irx3','Fzd1','Agr2','Wnt5b', 'Dach1',  'Tspan12', 
+              'Lbh', 'Notch2', 'Skil', 'Fmo1', 'Fmo2', 'Flt1', 'Tgfb2', 'Sftpd', 'Tfcp2l1','Sulf2',  'Thbs1' )
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Candidate2 Cell Marker") 
+dev.off()
+
+png(filename="c_dot_Candidate2.png")
+features <- c('Dmbt1',  'Erbb4','Nupr1','Irx3','Fzd1','Agr2','Wnt5b', 'Dach1',  'Tspan12', 
+              'Lbh', 'Notch2', 'Skil', 'Fmo1', 'Fmo2', 'Flt1', 'Tgfb2', 'Sftpd', 'Tfcp2l1','Sulf2',  'Thbs1')
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Candidate2 Cell Marker") 
+dev.off()
+##############################################################################################################################################################
+
+#check Candidate by violin plot
+png(filename="c_violin_Candidate 1.png")
+features <- c('Krt8', 'Krt18', 'Krt19', 'Alcam', 'Gabrp')
+VlnPlot(sc_subset_c, features = features, pt.size = 0.2, stack = TRUE, flip = TRUE)+
+  ggtitle("Candidate Cell Marker 1") 
+dev.off()
+
+png(filename="c_dot_Candidate 1.png")
+features <- c('Krt8', 'Krt18', 'Krt19', 'Alcam', 'Gabrp' )
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Candidate Cell Marker 1") 
+dev.off()
+
+
+#check Candidate by violin plot
+png(filename="c_violin_Candidate 2.png")
+features <- c('Dmbt1', 'Flt1', 'Tgfb2', 'Sftpd', 'Tfcp2l1', 'Wnt5b', 'Agr2') 
+
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Candidate Cell Marker 2") 
+dev.off()
+
+png(filename="c_dot_Candidate 2.png")
+features <- c('Dmbt1', 'Flt1', 'Tgfb2', 'Sftpd', 'Tfcp2l1', 'Wnt5b', 'Agr2')
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Candidate Cell Marker 2") 
+dev.off()
+
+
+#check Candidate by violin plot
+png(filename="c_violin_Candidate 3.png")
+features <- c('Tspan12', 'Skil', 'Irx3', 'Fmo1', 'Fmo2', 'Erbb4', 'Lbh', 'Notch2')
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Candidate Cell Marker 3") 
+dev.off()
+
+png(filename="c_dot_Candidate 3.png")
+features <- c('Tspan12', 'Skil', 'Irx3', 'Fmo1', 'Fmo2', 'Erbb4', 'Lbh', 'Notch2')
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Candidate Cell Marker 3") 
+dev.off()
+
+
+#check Candidate by violin plot
+png(filename="c_violin_Candidate 4.png")
+features <- c('Nupr1', 'Sulf2', 'Thbs1', 'Fzd1', 'Dach1') 
+
+VlnPlot(sc_subset_c, features = features, pt.size = 0, stack = TRUE, flip = TRUE)+
+  ggtitle("Candidate Cell Marker 4") 
+dev.off()
+
+png(filename="c_dot_Candidate 4.png")
+features <- c('Nupr1', 'Sulf2', 'Thbs1', 'Fzd1', 'Dach1')
+DotPlot(sc_subset_c, features = features )+ RotatedAxis()+
+  ggtitle("Candidate Cell Marker 4") 
+dev.off()
+
+
+
+
+##############################################################################################################################################################
+#3. Perform Gene Set Enrichment Analysis (GSEA) for Stem Cell Homeostasis
+##############################################################################################################################################################
+
+  if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+  
+  BiocManager::install("clusterProfiler")
+
+library(clusterProfiler)
+  
+  #BiocManager::install("org.Hs.eg.db")
+  BiocManager::install("org.Mm.eg.db")
+library(org.Mm.eg.db)  # For human data use org.Hs.eg.db); use `org.Mm.eg.db` for mouse
+
+gene_list <- c_clusterStemVsDif$avg_log2FC
+names(gene_list) <- rownames(c_clusterStemVsDif)
+head(names(gene_list))
+
+# Convert gene names to uppercase
+names(gene_list) <- toupper(names(gene_list))
+
+# Display the updated gene names
+head(names(gene_list))
+
+
+# Check for unusual characters or lowercase genes
+invalid_genes <- names(gene_list)[!grepl("^[A-Z0-9]+$", names(gene_list))]
+invalid_genes
+
+
+gene_list <- sort(gene_list, decreasing = TRUE)
+
+summary(gene_list)
+head(gene_list)
+
+
+
+gsea_results <- gseGO(
+  geneList = gene_list,
+  ont = "BP",
+  keyType = "SYMBOL",
+  OrgDb = org.Mm.eg.db,
+  pAdjustMethod = "BH",
+  pvalueCutoff = 1,  # Allow all p-values for initial inspection
+  minGSSize = 5,     # Allow smaller gene sets
+  maxGSSize = 1000,  # Allow larger gene sets
+  scoreType = "pos",
+  verbose = TRUE
+)
+
+
+# Visualize GSEA results
+dotplot(gsea_results)
+
+hist(gene_list, main = "Distribution of Gene Fold Changes", xlab = "Log2 Fold Change", breaks = 50)
+
+valid_genes <- bitr(names(gene_list), fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)
+valid_gene_list <- gene_list[names(gene_list) %in% valid_genes$SYMBOL]
+
+dotplot(gsea_results, showCategory = 20) + ggtitle("GSEA Dotplot for Stem Cell vs Differentiated Clusters")
+head(gsea_results)
+write.csv(gsea_results, file = "c_gsea_results.csv", row.names = TRUE)
+
+gseaplot2(gsea_results, geneSetID = "GO:0030154", title = "GSEA Plot for Selected Pathway:cell differentiation")
+gseaplot(gsea_results, geneSetID = "GO:0030154", title = "GSEA Plot for Selected Pathway:cell differentiation")
+
+# Convert GSEA results to a data frame
+gsea_df <- as.data.frame(gsea_results)
+
+# Filter for terms containing keywords related to stem cells
+#stem_related_terms <- gsea_df[grep("stem|pluripotent|differentiation|fate|development|proliferation", 
+ #                                  gsea_df$Description, ignore.case = TRUE), ]
+
+# View filtered results
+#head(stem_related_terms)
+#dotplot(stem_related_terms) + ggtitle("Stem Cell-Related GSEA Pathways")
+
+# Check the top rows of the GSEA results
+head(gsea_df)
+# Filter for more general terms related to stem cells
+stem_related_terms <- gsea_df[grep("proliferation|regulation|development|fate|differentiation|biological", 
+                                   gsea_df$Description, ignore.case = TRUE), ]
+
+# Check the filtered results
+head(stem_related_terms)
+
+library(clusterProfiler)
+gseaplot(gsea_results, geneSetID = "GO:0065007", title = "biological regulation")
+#install.packages("BiocManager")
+#BiocManager::install("clusterProfiler")
+# Save the filtered stem-related terms to a CSV file
+write.csv(stem_related_terms, file = "c_stem_related_terms.csv", row.names = FALSE)
+head(stem_related_terms)
+
+##4. Explore KEGG Pathway Analysis
+
+library(org.Mm.eg.db)
+
+# Convert gene symbols to Entrez IDs
+gene_symbols <- names(gene_list)
+entrez_ids <- mapIds(
+  org.Mm.eg.db,
+  keys = gene_symbols,
+  column = "ENTREZID",
+  keytype = "SYMBOL",
+  multiVals = "first"
+)
+
+# Remove any NA values
+valid_indices <- !is.na(entrez_ids)
+gene_list <- gene_list[valid_indices]
+names(gene_list) <- entrez_ids[valid_indices]
+
+# Check the updated gene list
+head(gene_list)
+gsea_kegg <- gseKEGG(
+  geneList = gene_list,
+  organism = "mmu",
+  pvalueCutoff = 1,
+  pAdjustMethod = "BH",
+  minGSSize = 5,
+  maxGSSize = 1000,
+  verbose = TRUE
+)
+
+head(names(gene_list))
+# Dot plot for KEGG GSEA results
+library(enrichplot)
+
+dotplot(gsea_kegg, showCategory = 20)
+# KEGG Pathway network plot
+cnetplot(gsea_kegg, showCategory = 10)
+# KEGG Enrichment map plot
+emapplot(gsea_kegg)
+
+summary(gsea_kegg)
+
+
+# Re-create the 'gsea_kegg' object as 'enrichResult' if necessary.
+library(clusterProfiler)
+
+# Assuming 'gsea_kegg' is a result from gseKEGG, check its class
+class(gsea_kegg)
+
+# If it is not of class 'enrichResult', try this:
+gsea_kegg <- enrichKEGG(
+  gene = names(gene_list),
+  organism = "mmu",
+  pvalueCutoff = 1,
+  pAdjustMethod = "BH",
+  minGSSize = 5,
+  maxGSSize = 1000
+)
+# Filter out any rows with missing descriptions
+gsea_kegg <- gsea_kegg[!is.na(gsea_kegg$Description), ]
+
+# Create the enrichment map plot
+emapplot(gsea_kegg)
+# Now you can try running 'emapplot' on the enriched result
+emapplot(gsea_kegg)
+
+# Assuming gsea_kegg has been already computed (for KEGG enrichment analysis)
+# Run cnetplot for the KEGG pathway network plot
+cnetplot(gsea_kegg, showCategory = 10)
+dotplot(gsea_kegg, showCategory = 20)
+
+
+##############################################################################################################################################################
+#4. Pseudotime Analysis to Identify Dynamic Genes
+#dentify genes that change along the differentiation trajectory using Slingshot, Monocle3, or SeuratExtended.
+#dynamic Gene Analysis: Look for genes that show specific expression patterns near the stem cell cluster.
+##############################################################################################################################################################
+library(slingshot)
+# Install Slingshot from Bioconductor
+#BiocManager::install("slingshot")
+# Assume PCA has already been performed on `seurat_obj`
+pca_data <- Embeddings(sc_subset_c, "pca")[, 1:2]
+cluster_labels <- Idents(sc_subset_c)
+
+slingshot_obj <- slingshot(pca_data, cluster_labels)
+
+# Get the pseudotime values from the Slingshot object
+pseudotime_values <- slingPseudotime(slingshot_obj)
+
+# Check the structure of the pseudotime values
+head(pseudotime_values)
+
+#3. Extracting Gene Expression along Pseudotime
+# Ensure you have cell names or IDs in order
+cell_order <- order(pseudotime_values)
+
+# Extract gene expression from your Seurat object (assuming 'sc_subset_c' is your Seurat object)
+
+    # Select pseudotime for a specific lineage (e.g., Lineage1)
+    selected_pseudotime <- pseudotime_values[, "Lineage1"]
+    
+    # Remove cells with NA pseudotime values
+    valid_indices <- which(!is.na(selected_pseudotime))
+    selected_pseudotime <- selected_pseudotime[valid_indices]
+    
+    # Order cells by pseudotime values
+    cell_order <- order(selected_pseudotime)
+    ordered_pseudotime <- selected_pseudotime[cell_order]
+    ordered_cell_names <- names(ordered_pseudotime)
+    
+    # Extract gene expression from your Seurat object for the ordered cells
+    expression_data <- GetAssayData(sc_subset_c, assay = "RNA", layer = "data")
+    
+    # Ensure matching cell names
+    expression_data <- expression_data[, ordered_cell_names]
+    
+ordered_expression <- GetAssayData(sc_subset_c, assay = "RNA", slot = "data")[, cell_order]
+# Extract the pseudotime values in the same order as cells in the expression data
+ordered_pseudotime <- pseudotime_values[cell_order]
+
+
+
+#4. Correlation of Gene Expression with Pseudotime
+# Check for genes with non-zero expression across all cells
+non_zero_genes <- rowSums(expression_data > 0) > 0
+sum(non_zero_genes)  # Number of genes with non-zero expression
+
+# Remove NA pseudotime values and corresponding cells
+valid_indices <- which(!is.na(ordered_pseudotime))
+ordered_pseudotime <- ordered_pseudotime[valid_indices]
+ordered_expression <- ordered_expression[, valid_indices]
+
+dim(ordered_expression)
+length(ordered_pseudotime)
+
+#Recalculate Correlations
+# Initialize a vector to store correlation values for each gene
+correlation_values <- numeric(nrow(ordered_expression))
+
+# Loop over all genes and calculate the correlation with pseudotime
+for (i in 1:nrow(ordered_expression)) {
+  correlation_values[i] <- cor(ordered_expression[i, ], ordered_pseudotime, method = "pearson")
+}
+
+# Create a data frame of correlation values
+correlation_df <- data.frame(gene = rownames(ordered_expression), correlation = correlation_values)
+correlation_df$abs_correlation <- abs(correlation_df$correlation)
+
+# Sort by absolute correlation values to find the most dynamic genes
+correlation_df <- correlation_df[order(-correlation_df$abs_correlation), ]
+# View the top genes with the most dynamic expression along pseudotime
+head(correlation_df)   
+
+   # Initialize a vector to store correlation values for each gene
+      #correlation_values <- numeric(nrow(ordered_expression))
+      
+      # Loop over all genes and calculate the correlation with pseudotime
+      #for (i in 1:nrow(ordered_expression)) {
+       # correlation_values[i] <- cor(ordered_expression[i, ], ordered_pseudotime, method = "pearson")
+      #}
+      
+      # Create a data frame of correlation values
+    #  correlation_df <- data.frame(gene = rownames(ordered_expression), correlation = correlation_values)
+      
+      # Sort by absolute correlation values to find the most dynamic genes
+     # correlation_df$abs_correlation <- abs(correlation_df$correlation)
+      #correlation_df <- correlation_df[order(-correlation_df$abs_correlation), ]
+      
+      # View top genes with the most dynamic expression along pseudotime
+      #head(correlation_df)
+
+
+#5. Visualizing Gene Expression along Pseudotime
+# Visualize expression of the most correlated genes
+top_genes <- correlation_df$gene[1:10]  # Top 10 genes
+
+# Create a plot for the first top gene
+FeaturePlot(sc_subset_c, features = top_genes[1], reduction = "pca") + 
+  ggtitle(paste("Expression of", top_genes[1], "along pseudotime"))
+
+# Or, you can plot line plots for each top gene's expression over pseudotime
+for (gene in top_genes) {
+  gene_expression_values <- ordered_expression[gene, ]
+  plot(ordered_pseudotime, gene_expression_values, 
+       type = "l", col = "blue", 
+       main = paste("Expression of", gene, "along pseudotime"), 
+       xlab = "Pseudotime", ylab = "Gene Expression")
+}
+
+##################################################################################################################################
+#how to identify novel stem genes in cluster 12 comparison to cluster 0,1,2,3,4,5 ,6,7,9 and 10 by performing pseudotime analysis? 
+##################################################################################################################################
+
+#install.packages("BiocManager")
+BiocManager::install(c("BiocGenerics", "DelayedArray", "DelayedMatrixStats", 
+                       "limma", "S4Vectors", "SingleCellExperiment", "SummarizedExperiment", 
+                       "batchelor"))
+BiocManager::install(version = "3.20")
+BiocManager::install(c("BiocGenerics", "DelayedArray", "DelayedMatrixStats", 
+                       "limma", "S4Vectors", "SingleCellExperiment", 
+                       "SummarizedExperiment", "batchelor", "HDF5Array"))
+remotes::install_github("cole-trapnell-lab/monocle3")
+library(monocle3)
+if (!requireNamespace("SeuratWrappers", quietly = TRUE)) {
+  remotes::install_github("satijalab/seurat-wrappers")
+}
+library(SeuratWrappers)
+
+
+
+#################################################################################################################################################
+#how to Reconstructing the developmental pseudotime trajectory of scRNA-seq data from cluster 0,1,2,3,4,5 ,6,7,9, 10 and 12?
+#################################################################################################################################################
+library(Seurat)
+library(monocle3)
+library(dplyr)
+
+#################################################################################################################################################
+#To reconstruct the developmental pseudotime trajectory of all clusters (0 to 12) and then 
+  #visualize a pseudotime trajectory plot only for selected clusters (0,1,2,3,4,5,6,7,9,10,12), 
+  #follow this step-by-step workflow using Monocle3.
+ 
+  
+#Monocle3 Workflow Example for Selected Clusters (0-12):
+# Step 1: Load necessary libraries
+library(monocle3)
+library(ggrepel)
+# Step 2: Load or create the Seurat object (assuming 'sc_subset_c' is your Seurat object)
+# Example Seurat object, already processed (normalized, clustering done, etc.)
+# seurat_obj <- CreateSeuratObject(counts = your_data_matrix)
+
+# Step 3: Extract the cluster identities from your Seurat object
+selected_clusters <- c(0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 12)
+
+# Filter cells belonging to these selected clusters
+selected_cells <- WhichCells(sc_subset_c, ident = selected_clusters)
+
+# Subset the Seurat object to only include the cells from the selected clusters
+seurat_selected <- subset(sc_subset_c, cells = selected_cells)
+
+# Extract data matrices from Seurat object
+expression_matrix <- GetAssayData(seurat_selected, slot = "counts")
+cell_metadata <- seurat_selected@meta.data
+gene_metadata <- data.frame(gene_short_name = rownames(expression_matrix), row.names = rownames(expression_matrix))
+
+cds <- new_cell_data_set(expression_matrix,
+                         cell_metadata = cell_metadata,
+                         gene_metadata = gene_metadata)
+# Add Seurat cluster information to Monocle3 object (cds)
+cds$seurat_clusters <- seurat_selected$seurat_clusters
+
+cds <- preprocess_cds(cds, num_dim = 50)
+cds <- reduce_dimension(cds, reduction_method = "UMAP")
+cds <- cluster_cells(cds)
+cds <- learn_graph(cds)
+# Get the coordinates of cluster centroids
+cluster_coords <- aggregate(reducedDims(cds)$UMAP, 
+                            by = list(cluster = cds$seurat_clusters), 
+                            FUN = mean)
+
+# Generate Monocle 3 trajectory plot and overlay Seurat cluster labels
+plot <- plot_cells(cds, 
+                   color_cells_by = "seurat_clusters", 
+                   show_trajectory_graph = TRUE) +
+  geom_text_repel(data = cluster_coords, 
+                  aes(x = UMAP1, y = UMAP2, label = cluster), 
+                  color = "red", size = 6, fontface = "bold") +
+  theme_minimal()
+
+
+# Get the UMAP coordinates of cells
+umap_coords <- reducedDims(cds)$UMAP
+
+# Create a dataframe with cluster labels
+cluster_data <- data.frame(UMAP1 = umap_coords[, 1], 
+                           UMAP2 = umap_coords[, 2], 
+                           cluster = cds$seurat_clusters)
+
+# Compute cluster centroids
+cluster_coords <- aggregate(cbind(UMAP1, UMAP2) ~ cluster, 
+                            data = cluster_data, 
+                            FUN = mean)
+
+# Generate Monocle 3 trajectory plot and overlay Seurat cluster labels
+plot <- plot_cells(cds, 
+                   color_cells_by = "seurat_clusters", 
+                   show_trajectory_graph = TRUE) +
+  geom_text_repel(data = cluster_coords, 
+                  aes(x = UMAP1, y = UMAP2, label = cluster), 
+                  color = "red", size = 6, fontface = "bold") +
+  theme_minimal()
+
+# Save the plot as a PNG image
+png("monocle_trajectory_seurat_clusters_annotated.png", width = 1000, height = 800)
+print(plot)
+dev.off()
+
+#To create pseudotime values and plot pseudotime ordering based on the original Seurat clusters in Monocle 3, 
+# Select the root cell (you may need to manually define it based on prior knowledge)
+cds <- order_cells(cds)
+
+# Extract pseudotime values
+pseudotime_values <- pseudotime(cds)
+
+# Add pseudotime values to the Monocle object
+cds$pseudotime <- pseudotime_values
+
+# Extract UMAP coordinates
+umap_coords <- reducedDims(cds)$UMAP
+
+# Create dataframe with pseudotime and Seurat cluster assignments
+pseudotime_data <- data.frame(UMAP1 = umap_coords[, 1], 
+                              UMAP2 = umap_coords[, 2], 
+                              pseudotime = pseudotime_values, 
+                              cluster = cds$seurat_clusters)
+
+library(ggplot2)
+
+# Scatter plot of UMAP with pseudotime values
+ggplot(pseudotime_data, aes(x = UMAP1, y = UMAP2, color = pseudotime)) +
+  geom_point(size = 1.5) +
+  scale_color_viridis_c(option = "magma") +  # Adjust color scale for pseudotime
+  theme_minimal() +
+  labs(title = "Pseudotime Order Based on Original Seurat Clusters",
+       color = "Pseudotime") +
+  theme(text = element_text(size = 14))
+#Alternative: Facet Plot by Seurat Clusters
+ggplot(pseudotime_data, aes(x = UMAP1, y = UMAP2, color = pseudotime)) +
+  geom_point(size = 1.5) +
+  scale_color_viridis_c(option = "magma") +
+  theme_minimal() +
+  labs(title = "Pseudotime by Seurat Clusters",
+       color = "Pseudotime") +
+  facet_wrap(~ cluster) +  # Separate plots for each cluster
+  theme(text = element_text(size = 14))
+
+
+#To plot pseudotime ordering for specific Seurat clusters (0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 12) from Monocle 3,
+cds <- order_cells(cds)
+# Extract UMAP coordinates
+umap_coords <- reducedDims(cds)$UMAP
+
+# Extract pseudotime values
+pseudotime_values <- pseudotime(cds)
+
+# Extract cluster assignments
+clusters <- as.factor(cds$seurat_clusters)
+
+# Create a dataframe with pseudotime and cluster info
+pseudotime_data <- data.frame(
+  pseudotime = pseudotime_values,
+  cluster = clusters
+)
+
+selected_clusters <- c(0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 12)
+pseudotime_filtered <- pseudotime_data[pseudotime_data$cluster %in% selected_clusters, ]
+
+library(ggplot2)
+
+ggplot(pseudotime_filtered, aes(x = cluster, y = pseudotime, color = pseudotime)) +
+  geom_jitter(width = 0.2, size = 1.5, alpha = 0.6) +  # Jitter to spread points
+  stat_summary(fun = median, geom = "point", shape = 4, size = 5, color = "black") +  # Add median as 'X'
+  scale_color_viridis_c(option = "magma") +  # Gradient color for pseudotime
+  theme_minimal() +
+  labs(title = "Pseudotime Order by Cluster",
+       x = "Cluster",
+       y = "Pseudotime",
+       color = "Pseudotime") +
+  theme(text = element_text(size = 14),
+        axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate cluster labels
+
+
+#################################################################################################################
+
+#Using CytoTRACE to Predict Differentiation Trajectories
+#################################################################################################################
+install.packages("devtools")
+if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
+BiocManager::install("CytoTRACE")
+library(CytoTRACE)
+
+# Install if not already installed
+if (!requireNamespace("devtools", quietly = TRUE)) install.packages("devtools")
+devtools::install_github("KumarLabJax/CytoTRACE")  # Install CytoTRACE
+install.packages(c("Seurat", "Rtsne", "ggplot2", "plotly", "ggthemes"))
+
+
+
+
+
+
+
+
+
+
+##############################################################################################################################################################
+#5. Regulatory Network Analysis (SCENIC or GRNBoost2)
+  #To identify transcription factors critical for stem cell homeostasis.
+ #•	SCENIC: Infer gene regulatory networks (GRNs) and identify key transcription factors.
+##############################################################################################################################################################
+library(SCENIC)
+# Run SCENIC pipeline on your stem cell subset to identify master regulators
+#GRNBoost2: Build regulatory networks using gradient boosting.
+
+
+##############################################################################################################################################################
+#6. Gene Co-Expression Analysis
+#Identify gene modules co-expressed in stem cells that may indicate critical functions.
+##############################################################################################################################################################
+library(WGCNA)
+
+
+
+##############################################################################################################################################################
+#7. Validation of Important Genes
+#Validate identified genes by comparing them with known stem cell marker lists from public databases (e.g., StemChecker or MSigDB).
+##############################################################################################################################################################
+
+
+
+
+#############################################################################################
+#Gene Set Enrichment Analysis (GSEA)
+#to prepare data for GSEA website, but failed for lack of samples (samples >3 minimum)
+###########################################################################################
+# Load necessary library
+library(dplyr)
+
+# Read the differential expression results
+deg <- read_excel("c_clusterStemVsTA_wil.xlsx", col_names = TRUE)
+
+# Check column names to ensure they include "gene", "avg_log2FC", and "p_val_adj"
+head(deg)
+
+# Create the ranked list using avg_log2FC (change if using another statistic)
+deg_ranked <- deg %>%
+  filter(p_val_adj < 0.05) %>%  # Filter significant genes if needed
+  select(gene, avg_log2FC) %>%  # Use "gene" and ranking metric (log fold change)
+  arrange(desc(avg_log2FC))  # Rank genes in descending order
+
+# Save as tab-delimited file
+write.table(deg_ranked, "GSEA_input.rnk", quote=FALSE, sep="\t", row.names=FALSE, col.names=FALSE)
+
+
+#Extract Expression Data from Seurat Object
+# Load necessary library
+library(Seurat)
+library(dplyr)
+
+# Assume `seurat_obj` is your Seurat object
+Idents(sc_subset_c) <-c(5,7,12)   # Set cluster identity
+
+# Get the average expression for each cluster
+avg_expr <- AverageExpression(sc_subset_c, return.seurat = FALSE)$RNA
+
+# Convert to data frame and add gene names
+expr_data <- as.data.frame(avg_expr)
+expr_data <- tibble::rownames_to_column(expr_data, var = "Gene")
+
+# Save as tab-delimited file
+write.table(expr_data, "c_GSEA_expression.txt", quote = FALSE, sep = "\t", row.names = FALSE)
+
+expr_data <- read.table("c_GSEA_expression.txt", sep = "\t",header = TRUE)
+head(expr_data)
+
+#Convert Gene Names to Ensembl IDs
+# Load necessary libraries
+library(Seurat)
+library(dplyr)
+library(biomaRt)
+
+#if (!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+#BiocManager::install("biomaRt")
+
+# Assume `expr_data` is your existing data frame with gene names
+# Define the organism (choose 'hsapiens_gene_ensembl' for human, 'mmusculus_gene_ensembl' for mouse)
+mart <- useEnsembl("ensembl", dataset = "mmusculus_gene_ensembl")  # Change dataset if needed
+
+# Retrieve Ensembl IDs for gene symbols
+gene_mapping <- getBM(
+  attributes = c("mgi_symbol", "ensembl_gene_id"),  # HGNC symbol = Gene name # Change to "hgnc_symbol" for human
+  filters = "mgi_symbol",# Change to "hgnc_symbol" for human
+  values = expr_data$Gene,  # Use your gene name column
+  mart = mart
+)
+
+# Merge with expr_data to replace gene names with Ensembl IDs
+expr_data <- merge(gene_mapping, expr_data, by.x = "mgi_symbol", by.y = "Gene", all.y = TRUE)
+head(expr_data)
+  
+#find a lot of missing ensembl_gene_id
+    table(is.na(expr_data$ensembl_gene_id))  # Count TRUE/FALSE for NA values
+    table(expr_data$ensembl_gene_id == "")
+    table(expr_data$ensembl_gene_id == "NA")
+    
+    
+    missing_genes <- expr_data[is.na(expr_data$ensembl_gene_id), ]
+    head(missing_genes)
+    expr_data$mgi_symbol
+
+# Identify Missing Genes
+     missing_genes <- expr_data$mgi_symbol[is.na(expr_data$ensembl_gene_id)]
+    print(missing_genes)  # List of genes without an Ensembl ID
+
+#Retry Mapping with Alternative Attributes
+    gene_mapping_extended <- getBM(
+      attributes = c("mgi_symbol", "ensembl_gene_id", "external_synonym", "entrezgene_id"),
+      filters = "mgi_symbol",
+      values = missing_genes,
+      mart = mart
+    )
+    head(gene_mapping_extended)
+    
+    #merge this new mapping with your existing expr_data:
+    expr_data <- merge(expr_data, gene_mapping_extended, by = "mgi_symbol", all.x = TRUE, suffixes = c("", ".new"))
+    
+    # Fill missing Ensembl IDs with newly retrieved ones
+    expr_data$ensembl_gene_id[is.na(expr_data$ensembl_gene_id)] <- expr_data$ensembl_gene_id.new[is.na(expr_data$ensembl_gene_id)]
+    
+    # Remove temporary column
+    expr_data <- subset(expr_data, select = -ensembl_gene_id.new)
+    
+    # Check updated missing counts
+    table(is.na(expr_data$ensembl_gene_id))
+
+#biomaRt still leaves missing values, use org.Mm.eg.db
+    library(org.Mm.eg.db)
+    
+    # Map missing gene symbols using the org.Mm.eg.db database
+    mapped_ids <- mapIds(
+      org.Mm.eg.db,
+      keys = missing_genes,
+      keytype = "SYMBOL",
+      column = "ENSEMBL",
+      multiVals = "first"  # Choose first match if multiple exist
+    )
+    
+    # Fill missing Ensembl IDs
+    expr_data$ensembl_gene_id[is.na(expr_data$ensembl_gene_id)] <- mapped_ids[match(expr_data$mgi_symbol[is.na(expr_data$ensembl_gene_id)], names(mapped_ids))]
+    
+    # Check updated missing counts
+    table(is.na(expr_data$ensembl_gene_id))
+
+#there are still missing IDs, you can print the remaining unmapped genes:
+    remaining_missing <- expr_data$mgi_symbol[is.na(expr_data$ensembl_gene_id)]
+    print(remaining_missing)
+    #You can manually check for them in Ensembl.
+    
+#to check gene: Krt15
+  "Ccdc198" %in% expr_data$mgi_symbol
+  which(expr_data$mgi_symbol == "Krt15")
+  expr_data[expr_data$mgi_symbol == "Krt15", ]
+
+#to check missing gene: Ccdc198
+  expr_data[expr_data$mgi_symbol == "Ccdc198", ]
+
+
+# Remove gene name column and reorder
+# Rename columns for clarity
+colnames(expr_data)[colnames(expr_data) == "ensembl_gene_id"] <- "Gene"
+# Remove the original gene symbol column if needed
+expr_data <- subset(expr_data, select = -mgi_symbol)
+# Check the first few rows
+head(expr_data)
+# Save as tab-delimited file
+write.table(expr_data, "c_GSEA_expression_ensembl.txt", quote = FALSE, sep = "\t", row.names = FALSE)
+head(expr_data)
+
+#Prepare the .cls file (Class File)
+# Define sample groups manually
+cls_data <- c(
+  "3 2 1",
+  "# c12 TA",
+  "0 1 1"
+)
+
+# Write to file
+writeLines(cls_data, "c_GSEAsample.cls")
+
+
+#####################################################
+# check expression information for "Trpm8"
+seurat_c_EGFP$Trpm8_expr <- GetAssayData(object = seurat_c_EGFP, assay = "RNA", slot = "counts")["Trpm8", ] > 0
+sum(counts_c["Trpm8",]>0)
+sum(counts_c1["Trpm8",]>0)
+sum(counts_c2["Trpm8",]>0)
+VlnPlot(sc_subset_c, features = c("Trpm8"),pt.size=0.2)   
+VlnPlot(sc_subset_c, features = c("Trpm8")) 
+DotPlot(sc_subset_c, features = c("Trpm8"))
+
+#####################################################
+
+#####################################################
+
+#####################################################
+#####################################################
