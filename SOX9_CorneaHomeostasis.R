@@ -552,13 +552,13 @@ dev.off()
     # find all markers of cluster 12
     c_cluster12_wil <- FindMarkers(sc_subset_c, ident.1 = 12, test.use="wilcox", 
                                           min.pct = 0.25, logfc.threshold = 0.25 ) #only.pos = TRUE,
-    #c_cluster12_wil_f <- c_cluster12_wil %>% filter (p_val_adj<0.05)%>%arrange(avg_log2FC)
+    c_cluster12_wil_f <- c_cluster12_wil %>% filter (p_val_adj<0.05)%>%arrange(avg_log2FC)
     write.xlsx(c_cluster12_wil, file = "c_cluster12_wil.xlsx", rowNames=T)
     c_cluster12_wil <- read_excel("c_cluster12_wil.xlsx",  col_names = TRUE)
     # find all markers of cluster 12
     c_cluster12_roc <- FindMarkers(sc_subset_c, ident.1 = 12, test.use="roc",
                                           min.pct = 0.25, logfc.threshold = 0.25 ) 
-    #c_cluster12_roc_f <- c_cluster12_roc %>% filter (p_val_adj<0.05)%>%arrange(avg_log2FC)
+   c_cluster12_roc_f <- c_cluster12_roc %>% filter (myAUC>0.7)%>%arrange(avg_log2FC)
     write.xlsx(c_cluster12_roc, file = "c_cluster12_roc.xlsx", rowNames=T)
     c_cluster12_roc <- read_excel("c_cluster12_roc.xlsx",  col_names = TRUE)
     #innerjoin genes of cluster 12
@@ -567,6 +567,7 @@ dev.off()
     
     c_cluster12_wil_roc_join_f<- c_cluster12_wil_roc_join%>% filter (p_val_adj<0.05)%>% filter (myAUC>0.7)%>%arrange(avg_log2FC.x)
     write.xlsx(c_cluster12_wil_roc_join_f , file = "c_cluster12_wil_roc_join_f.xlsx",  rowNames=T)
+    c_cluster12_wil_roc_join_f <- read_excel("c_cluster12_wil_roc_join_f.xlsx", col_names = T)
 ###################################################################################################
 # Strategy 3. find the DEGs of all cell containing EGFP (EGFP_bGhpolyA positive)
 ###################################################################################################
@@ -582,6 +583,7 @@ dev.off()
                                       test.use="wilcox") #only.pos = TRUE,
     c_EGFP_wil_df <- as.data.frame.matrix(c_EGFP_wil)
     c_EGFP_wil_df <- c_EGFP_wil_df %>% rownames_to_column(var = "Gene")
+    c_EGFP_wil_f <- c_EGFP_wil_df %>% filter(p_val_adj<0.05)
     #c_EGFP_wil_f <- c_EGFP_wil%>%filter(p_val_adj<0.05)%>%arrange(avg_log2FC)
     # Save DEG results
     #write.xlsx(c_EGFP_wil_df, file = "c_EGFP_wil.xlsx", rowNams=T)
@@ -595,6 +597,7 @@ dev.off()
                               test.use="roc") #only.pos = TRUE,
     c_EGFP_roc_df <- as.data.frame.matrix(c_EGFP_roc)
     c_EGFP_roc_df <- c_EGFP_roc_df %>% rownames_to_column(var = "Gene")
+    c_EGFP_roc_f <- c_EGFP_roc_df%>% filter (myAUC>0.7)
     #c_EGFP_roc_f <- c_EGFP_roc%>%filter(myAUC>0.7)%>%arrange(avg_log2FC)
     # Save DEG results
     #write.xlsx(c_EGFP_roc_df, file = "c_EGFP_roc.xlsx", rowNams=T)
@@ -606,7 +609,7 @@ dev.off()
     
     c_EGFP_wil_roc_join_f <- c_EGFP_wil_roc_join %>% filter (p_val_adj<0.05)%>% filter (myAUC>0.7)%>%arrange(avg_log2FC.x)
     write.xlsx(c_EGFP_wil_roc_join_f , file = "c_EGFP_wil_roc_join_f.xlsx",  rowNames=T)
-
+    c_EGFP_wil_roc_join_f <- read_excel("c_EGFP_wil_roc_join_f.xlsx", col_names = T)
 #==================================================
 ### pathway 
 #==================================================
