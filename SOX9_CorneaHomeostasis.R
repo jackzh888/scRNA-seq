@@ -538,6 +538,7 @@ dev.off()
     
     
     
+    
     #inner_join the two statistics test results with the original average expression data
     c_cluster12vsTA_wil_roc_Aveexp <- avg_exp  %>%
       inner_join(c_clusterStemVsTA_wil, by = "Gene")%>%
